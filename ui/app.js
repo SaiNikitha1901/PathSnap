@@ -12,10 +12,9 @@
   // ---------- map ----------
   const map = L.map("map", { zoomControl: false, preferCanvas: false, worldCopyJump: true }).setView([30, 20], 3);
   L.control.zoom({ position: "bottomright" }).addTo(map);
-  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
-    maxZoom: 16, attribution: "Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors",
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "&copy; OpenStreetMap contributors",
   }).addTo(map);
-  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}", { maxZoom: 16, opacity: 0.8 }).addTo(map);
   [["net", 402], ["gps", 405], ["routes", 410], ["cursor", 440]].forEach(([n, z]) => { map.createPane(n); map.getPane(n).style.zIndex = z; });
   const R = { net: L.canvas({ pane: "net" }), gps: L.canvas({ pane: "gps" }), routes: L.svg({ pane: "routes", padding: 0.5 }), cursor: L.svg({ pane: "cursor" }) };
   const G = { net: L.layerGroup().addTo(map), gps: L.layerGroup().addTo(map), routes: L.layerGroup().addTo(map), cursor: L.layerGroup().addTo(map) };
@@ -111,7 +110,7 @@
     let s = 0; const tick = setInterval(() => { if (s < lis.length) lis[s++].classList.add("on"); }, 380);
     try {
       const res = await call("POST", "/predict", { trip_id: state.sel, models: keys });
-      res.models.forEach((m) => { const meta = state.models.find((x) => x.key === m.key); m.c = meta ? meta.c : m.colour; });
+      res.models.forEach((m) => { const meta = state.models.find((x) => x.key === m.key); m.c = meta ? meta.c : m.colour; if (meta) m.label = meta.label; });
       ["net", "gps", "routes", "cursor"].forEach((p) => map.getPane(p).style.opacity = 0);
       await new Promise((ok) => setTimeout(ok, 250));
       state.result = res; state.idx = 0; state.pos = 0; lastChipIdx = -1;
