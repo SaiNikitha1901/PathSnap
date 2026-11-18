@@ -231,3 +231,5 @@ body.hide-right .fitbtn { right: 16px; }
 .lbar-key { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 5px; font: 500 10.5px "JetBrains Mono", monospace; color: var(--ink2); }
 .lbar-key span { display: inline-flex; align-items: center; gap: 4px; }
 .lbar-key i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+
+body:not(.has-result) .fitbtn { display: none; }

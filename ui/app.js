@@ -68,6 +68,8 @@
       models.forEach((m, i) => { m.c = colour(m, i); m.label = m.label.replace("Ensemble (LGBM-tuned + XGB)", "Ensemble").replace("LightGBM (tuned)", "LightGBM"); if (!(m.key in state.on)) state.on[m.key] = !!m.default || ["xgboost", "random_forest"].includes(m.key); state.mode[m.key] = state.mode[m.key] || "hmm"; });
       $("connDot").className = "dot on";
       renderTrips(); renderModels(); toast(`Connected · ${trips.length} journeys · ${models.length} models`);
+      if (!state.sel && trips.length && !qs.get("trip")) selectTrip(trips[0].trip_id);
+      const h = document.querySelector("#hero ol"); if (h) h.innerHTML = `<li><b>Connected</b> ✓ ${trips.length} evaluation journeys loaded.</li><li><b>Choose</b> a journey on the left (the first one is selected).</li><li>Press <b>Reconstruct route</b> to compare the models.</li>`;
     } catch (e) {
       $("connDot").className = "dot err"; toast("Could not reach the server — check the IP, port and Wi-Fi");
     }
@@ -119,7 +121,10 @@
   function fitTrip(dur) { if (state.bounds) map.flyToBounds(state.bounds, { ...pads(), duration: dur || 1.2, easeLinearity: 0.15 }); }
   window.__fit = fitTrip;
   const activeKeys = () => state.models.filter((m) => state.on[m.key]).map((m) => m.key);
-  function updateRunBtn() { $("runBtn").disabled = !(state.sel && activeKeys().length); }
+  function updateRunBtn() {
+    const ok = !!(state.sel && activeKeys().length); const b = $("runBtn"); b.disabled = !ok;
+    b.querySelector("span").textContent = !state.trips.length ? "Connect to the server first" : !state.sel ? "Choose a journey first" : !activeKeys().length ? "Turn on at least one model" : `Reconstruct route · ${state.sel}`;
+  }
 
   // ---------- run ----------
   async function run() {
@@ -135,7 +140,7 @@
       state.result = res; state.idx = 0; state.pos = 0; lastChipIdx = -1;
       drawBase(); drawRoutes(ANIM); renderSummary(); setupTimeline();
       ["net", "gps", "routes", "cursor"].forEach((p) => map.getPane(p).style.opacity = 1);
-      $("results").classList.remove("hidden"); $("timeline").classList.remove("hidden");
+      $("results").classList.remove("hidden"); $("timeline").classList.remove("hidden"); document.body.classList.add("has-result");
       requestAnimationFrame(() => { $("results").classList.add("in"); $("timeline").classList.add("in"); renderBoard(); });
     } catch (e) { toast("Prediction failed: " + e.message.slice(0, 120)); }
     finally { clearInterval(tick); lis.forEach((l) => l.classList.add("on")); setTimeout(() => $("loader").classList.add("hidden"), 200); }
