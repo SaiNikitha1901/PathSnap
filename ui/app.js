@@ -209,6 +209,11 @@
         <div class="row1"><span class="rank">#${i + 1}</span><span class="lbl">${m.label}</span><span class="lift ${lift < 0 ? "neg" : ""}">${lift >= 0 ? "+" : ""}${lift.toFixed(1)} pts from HMM</span></div>
         <div class="big">${pct(acc(m))}%</div><div class="cap">points on the right road · ${hmm ? "HMM" : "raw classifier"}</div>
         <div class="bars">${rows.map(([k, v, soft]) => `<span>${k}</span><div class="bar"><i class="${soft ? "soft" : ""}" data-w="${(100 * (v || 0)).toFixed(1)}"></i></div><span class="n">${pct(v)}</span>`).join("")}</div>
+        <div class="lenerr">
+          <div><span>Length error</span><b>${pct(hmm ? x.length_error : x.length_error_clf)}%</b><small>lower is better</small></div>
+          <div><span>Route length</span><b>${x.pred_length_km != null ? x.pred_length_km.toFixed(2) : "–"} km</b><small>${x.length_diff_pct != null ? (x.length_diff_pct >= 0 ? "+" : "") + (100 * x.length_diff_pct).toFixed(1) + "% vs true" : ""}</small></div>
+          <div><span>Added / missed</span><b>${x.length_added_m != null ? Math.round(x.length_added_m) : "–"} / ${x.length_missed_m != null ? Math.round(x.length_missed_m) : "–"} m</b><small>metres, HMM</small></div>
+        </div>
         <div class="foot"><span>${m.n_route_arcs} road segments</span><span>${Math.round(m.infer_ms)} ms model time</span></div>
       </div>`;
     }).join("") || `<div class="placeholder">Turn on at least one model.</div>`;

@@ -23,7 +23,7 @@ from pathsnap.features import FEATURES  # noqa: E402
 from pathsnap.hmm import HMMParams, classifier_top1, per_point, precompute_steps, reconstruct_route, viterbi  # noqa: E402
 from pathsnap.io import list_trips, load_trip  # noqa: E402
 from pathsnap.labels import align_to_route  # noqa: E402
-from pathsnap.metrics import pointwise_accuracy, route_continuity, route_prf  # noqa: E402
+from pathsnap.metrics import pointwise_accuracy, route_continuity, route_prf, route_length_error  # noqa: E402
 from pathsnap.pipeline import DEFAULT_CFG, prepare_trip  # noqa: E402
 
 ART = os.environ.get("ARTIFACTS_DIR", os.path.join(ROOT, "artifacts"))
@@ -176,6 +176,9 @@ class Engine:
                 prf = route_prf(r_hmm, item["route"], p.net)
                 metrics.update({k2.replace("route_", "route_") : v for k2, v in prf.items()})
                 metrics["route_f1_clf"] = route_prf(r_clf, item["route"], p.net)["route_f1"]
+                le = route_length_error(r_hmm, item["route"], p.net)
+                metrics.update(le)
+                metrics["length_error_clf"] = route_length_error(r_clf, item["route"], p.net)["length_error"]
             metrics = {a: (round(float(b), 4) if b == b else None) for a, b in metrics.items()}
             results.append({"key": m.key, "label": m.label, "colour": m.colour, "infer_ms": round(infer_ms, 1),
                             "hmm_route": self._route_polylines(r_hmm, p.net), "clf_route": self._route_polylines(r_clf, p.net),

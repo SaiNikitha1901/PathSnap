@@ -217,3 +217,9 @@ body.hide-right .fitbtn { right: 16px; }
 .leaflet-tile { transition: opacity .35s ease; }
 .leaflet-fade-anim .leaflet-tile { will-change: opacity; }
 @media (max-width: 860px) { .fold, .fitbtn { display: none; } }
+
+.lenerr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+.lenerr div { background: #f6f7f9; border-radius: 10px; padding: 7px 8px; min-width: 0; }
+.lenerr span { display: block; font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lenerr b { display: block; font: 700 13px "JetBrains Mono", monospace; color: var(--ink); margin-top: 1px; white-space: nowrap; }
+.lenerr small { display: block; font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

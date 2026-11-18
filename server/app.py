@@ -66,8 +66,8 @@ def predict(req: PredictRequest):
     out = engine.predict(req.trip_id, req.models)
     for m in out["models"]:
         mt = m["metrics"]
-        log.info("   %-16s acc clf=%s hmm=%s | route F1=%s | continuity=%s | %d route arcs | %.0f ms",
-                 m["key"], mt.get("accuracy_clf"), mt.get("accuracy_hmm"), mt.get("route_f1"), mt.get("continuity_hmm"), m["n_route_arcs"], m["infer_ms"])
+        log.info("   %-16s acc clf=%s hmm=%s | route F1=%s | length error=%s | continuity=%s | %d route arcs | %.0f ms",
+                 m["key"], mt.get("accuracy_clf"), mt.get("accuracy_hmm"), mt.get("route_f1"), mt.get("length_error"), mt.get("continuity_hmm"), m["n_route_arcs"], m["infer_ms"])
     log.info("   trip %s: %d GPS points, %d candidate rows, prep %.0f ms (cached=%s), total %.0f ms",
              req.trip_id, out["points"], out["candidate_rows"], out["prep_ms"], out["cached"], out["total_ms"])
     return out
