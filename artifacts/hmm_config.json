@@ -1,0 +1,8 @@
+{
+ "alpha": 1.0,
+ "beta": 10.0,
+ "eps": 0.0001,
+ "unreachable": -30.0,
+ "gap_break": 60.0,
+ "uturn": 15.0
+}

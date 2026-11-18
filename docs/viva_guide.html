@@ -102,19 +102,82 @@ DP rule: <code>cost[i][k] = dist(point i, route arc k) + min over k' ≤ k of co
 <div class="qa"><div class="q">Q: Overfitting?</div><div class="a">Compare train score vs CV score vs student-test score. A big gap means overfitting (deep trees, KNN with small k). All three being low means underfitting (Naive Bayes, Logistic Regression).</div></div>
 <div class="box">Numbers: see Section 0. LightGBM is the best on Top-1 (0.903 on student-test). Naive Bayes is the worst (0.853, log loss 0.708).</div>
 
-<h2>8. Batch 2 basics (learn after Batch 1)</h2>
-<div class="qa"><div class="q">Q: Bayesian hyperparameter optimisation?</div><div class="a">We use Optuna's <b>TPE</b>. Unlike grid or random search, it <b>learns from past trials</b> which areas of the search space look good, and tries there next. Same GroupKFold, objective = CV Top-1 accuracy, about 40 trials. We report tuned vs untuned.</div></div>
-<div class="qa"><div class="q">Q: Why an HMM at all?</div><div class="a">The classifier looks at each point alone, so two neighbouring points can land on roads that are not even connected. The HMM adds <b>road connectivity over time</b>.</div></div>
-<ul>
-<li><b>Hidden states:</b> the candidate arcs of each point. <b>Observations:</b> the GPS points.</li>
-<li><b>Emission:</b> the classifier probability (normalised over that point's candidates), to a power α, with a small floor ε.</li>
-<li><b>Transition:</b> <code>exp(−|driving distance − straight distance| / β)</code>. If the road distance between two candidates is about the same as the GPS jump, the move is likely. A huge detour is unlikely. The driving distance comes from Dijkstra on the directed road graph.</li>
-<li><b>Unreachable pair:</b> a big fixed penalty, not zero, so the chain never breaks. <b>Large GPS gap:</b> β grows with the gap, and after 60 s the chain restarts. <b>Point with no candidate:</b> skipped, and its gap is filled with the shortest path.</li>
-<li><b>Viterbi:</b> dynamic programming. <code>δ_t(b) = max_a [δ_{t−1}(a) + log T(a,b)] + log E_t(b)</code>. Keep the best previous state for each state, then back-track from the end. Cost: O(T · K²).</li>
-<li><b>Compare</b> classifier-only vs classifier + HMM on pointwise accuracy, continuity and route F1.</li>
-</ul>
-<div class="qa"><div class="q">Q: API and UI?</div><div class="a">Laptop 1 (Nikitha's Mac) runs <b>FastAPI</b> with the model, the road data and the hidden labels. Laptop 2 runs an HTML page with a Leaflet map. The UI asks <code>GET /trips</code> for the list, then sends <code>POST /predict {trip_id}</code>. The server runs the full pipeline, scores it against the labels <b>on the server</b>, and returns only the predicted route and the metrics. The reference route is never sent to the UI. Every request is printed in the server terminal (the API logs).</div></div>
+<h2>8. Phase 2: tuning, HMM, ensemble, API and UI (our real numbers)</h2>
+<div class="box">Note: in Phase 2 we added 5 better <b>direction features</b> (23 features in total). The "adaptive" heading looks over a wider window until the car has moved 20 m, which helps slow trips like no. 77. That's why the Phase 2 numbers are a bit higher than Phase 1.</div>
 
+<h3>8.1 Bayesian optimisation (Notebook 02)</h3>
+<ul>
+<li><b>Tool:</b> Optuna, using the <b>TPE</b> sampler (Tree-structured Parzen Estimator). In simple words: after each trial, TPE splits the past trials into "good" and "bad" and builds a probability model for each group. It then picks the next settings where good results are likely. Grid or random search never learns from the past. That learning is what makes it <b>Bayesian</b>.</li>
+<li><b>What we tuned (8 hyperparameters):</b> num_leaves (15–255, log scale), learning_rate (0.01–0.2, log), n_estimators (150–900), min_child_samples (5–200, log), subsample (0.5–1), colsample_bytree (0.4–1), reg_lambda (0.001–30, log), and a class-weight factor (0.1–1.5 × the 1:9 ratio).</li>
+<li><b>Objective:</b> the mean <b>CV observation Top-1</b> over 5-fold GroupKFold by trip, on the 80 train trips. Each fold used 20k sampled points for fitting and 8k for checking. Macro F1 and log loss were also logged for every trial.</li>
+<li><b>Trials:</b> 30, taking 5.0 minutes. <b>Best:</b> num_leaves 27, learning_rate 0.030, n_estimators 250, min_child_samples 72, subsample 0.70, colsample 0.41, reg_lambda 0.017, scale_pos_weight 7.38.</li>
+</ul>
+<table><tr><th></th><th>CV macro F1</th><th>CV Top-1</th><th>Test Top-1</th><th>Test macro F1</th><th>Test log loss</th><th>Inference (10 trips)</th></tr>
+<tr><td>LightGBM untuned</td><td>0.929</td><td>0.888</td><td><b>0.917</b></td><td>0.926</td><td>0.100</td><td>0.82 s</td></tr>
+<tr><td>LightGBM tuned</td><td>0.921</td><td><b>0.891</b></td><td>0.905</td><td>0.919</td><td>0.119</td><td>0.53 s</td></tr></table>
+<div class="qa"><div class="q">Q: Did tuning help? (Answer honestly.)</div><div class="a">Only a little, and only on its own objective: CV Top-1 went from 0.888 to 0.891. On student-test the tuned model was <b>worse</b> (0.905 vs 0.917). Our explanation: Optuna searched on <b>small samples</b> (20k points), and small samples favour small, heavily regularised models (250 trees, 27 leaves). When we refit on all 1.2 million rows, that small model <b>underfits</b>. It is faster, though (0.53 s vs 0.82 s). Lesson: tune on data that looks like the final training set. We kept the tuned model, used it inside the ensemble, and reported both numbers.</div></div>
+
+<h3>8.2 More models (Notebook 03): 13 models tried in total</h3>
+<table><tr><th>Model</th><th>CV macro F1</th><th>Test Top-1</th><th>+HMM</th><th>Test log loss</th></tr>
+<tr><td>XGBoost</td><td>0.934</td><td>0.915</td><td>0.948</td><td>0.091</td></tr>
+<tr><td>LightGBM untuned (reference)</td><td>0.928</td><td>0.910</td><td>0.948</td><td>0.098</td></tr>
+<tr><td>HistGradientBoosting</td><td>0.928</td><td>0.906</td><td>0.936</td><td>0.100</td></tr>
+<tr><td>Deep MLP 128-64-32</td><td>0.931</td><td>0.903</td><td>0.934</td><td>0.086</td></tr>
+<tr><td>AdaBoost (200 depth-3 trees)</td><td>0.933</td><td>0.898</td><td>0.933</td><td>0.327</td></tr>
+<tr><td>Linear SVM (calibrated)</td><td>0.916</td><td>0.884</td><td>0.920</td><td>0.108</td></tr></table>
+<ul>
+<li><b>Linear SVM</b> has no probabilities. We wrapped it in <b>CalibratedClassifierCV (Platt / sigmoid)</b>, which fits a small logistic curve on its margins.</li>
+<li><b>AdaBoost</b> has a good F1, but its log loss is bad (0.327). Its scores are not well-calibrated probabilities. It was also the slowest to train (395 s).</li>
+</ul>
+
+<h3>8.3 Soft-voting ensemble: our final model</h3>
+<ul>
+<li><b>Soft voting</b> = <b>average the probabilities</b> of several models, then run the HMM. Different models make partly different mistakes, so averaging cancels some of them.</li>
+<li>We tried 10 combinations. The best was <b>tuned LightGBM + XGBoost</b>: <b>0.9535 pointwise with HMM</b>, vs 0.9467 for tuned LightGBM alone. It is the default model in the API and the UI.</li>
+<li>Surprise: adding RF and MLP made it <i>worse</i> (about 0.940). Their probabilities are "softer" (better log loss), which weakens the HMM's emission signal.</li>
+</ul>
+
+<h3>8.4 HMM + Viterbi (how it works and the results)</h3>
+<ul>
+<li><b>Hidden states:</b> the candidate arcs of each GPS point (up to 10). <b>Observations:</b> the GPS points.</li>
+<li><b>Emission:</b> the classifier probability, normalised over the point's candidates, as <code>α · log(max(p, ε))</code>.</li>
+<li><b>Transition:</b> <code>−|driving distance − straight distance| / (β · max(1, Δt))</code>.
+  <ul>
+  <li>The driving distance comes from Dijkstra on the <b>directed</b> road graph.</li>
+  <li>On the same arc, the distance is <b>signed</b>, so moving backwards is penalised.</li>
+  <li>Jumping onto the reverse arc of the same road (a U-turn) gets an extra penalty.</li>
+  </ul></li>
+<li><b>Special cases:</b>
+  <ul>
+  <li><b>Unreachable pair:</b> a fixed penalty (−30), not −∞, so the chain never breaks.</li>
+  <li><b>Gap over 60 s:</b> the chain restarts. Trip 90 has a 42-hour gap!</li>
+  <li><b>No candidates:</b> the point is skipped, and its gap is filled with the shortest path.</li>
+  </ul></li>
+<li><b>Decoder tuning:</b> a grid of α × β × U-turn penalty (64 settings), tested on 16 <b>train</b> trips (scored with a model trained on the other 64) plus the 10 student-test trips. Best: <b>α = 1, β = 10, U-turn = 15</b>.</li>
+<li>We also tried <b>forward-backward (posterior) decoding</b>. It was slightly worse than Viterbi, so we kept Viterbi.</li>
+</ul>
+<table><tr><th>Student-test, point-weighted (tuned LightGBM)</th><th>Classifier only</th><th>+ HMM</th></tr>
+<tr><td>Pointwise accuracy</td><td>0.905</td><td><b>0.947</b></td></tr>
+<tr><td>Route continuity</td><td>0.987</td><td><b>0.999</b></td></tr>
+<tr><td>Route F1 (length-weighted)</td><td>0.949</td><td><b>0.983</b> (precision 0.968, recall 0.998)</td></tr></table>
+<div class="qa"><div class="q">Q: Where did the HMM not help?</div><div class="a">Trip 7: 0.905 became 0.886. The car ends the trip very slowly, like parking, so the heading is useless and consecutive points barely move. The decoder cannot tell the two directions of the same road apart, and it sometimes stays on the reverse arc. The route is still connected, though (route F1 0.977). Most other remaining errors are at junctions, where our derived label itself is uncertain.</div></div>
+<div class="qa"><div class="q">Q: Why not 97–100% pointwise?</div><div class="a">The <b>route</b> is recovered at about 98% F1 and 99.8% recall. The remaining pointwise errors are mostly at junctions (the predicted arc touches the true one) and on out-and-back roads. There the "correct" label for a point is ambiguous, because we derived it from the route with the DP alignment.</div></div>
+
+<h3>8.5 API (Laptop 1) and UI (Laptop 2)</h3>
+<ul>
+<li><b>FastAPI endpoints:</b> <code>GET /health</code>, <code>GET /models</code>, <code>GET /trips</code> (only ids, point counts and boxes), <code>POST /predict {trip_id, models}</code>.</li>
+<li><b>/predict</b> runs the full pipeline live: clean, then UTM, candidates (STRtree), features, model probabilities, classifier top-1 and Viterbi, and finally route reconstruction. It scores against <code>.route</code> <b>on the server</b>. The prediction code loads the trip <b>with the route removed</b>, and the route is only used afterwards for scoring. The reply contains the routes, the per-point matches and the metrics, <b>never</b> the reference route or the labels.</li>
+<li><b>Server logs:</b> every request prints the trip, the models, the accuracy (classifier and HMM), route F1, continuity and the time taken. Show these to the evaluator.</li>
+<li><b>Speed:</b> about 0.2–2.6 s per trip for all 5 models. Repeat calls are faster because prepared trips are cached.</li>
+<li><b>UI:</b> a "field atlas" page using Leaflet.
+  <ul>
+  <li>Choose a journey and the models, then click Reconstruct.</li>
+  <li>Each model draws its route as a <b>parallel coloured ribbon</b>. Where the ribbons split, the models disagree.</li>
+  <li>An <b>HMM/CLF switch</b> on each model shows the decoded route or the raw classifier route.</li>
+  <li>A <b>playback scrubber</b> moves along the drive and shows which arc each model snapped the dot to.</li>
+  <li>The <b>Findings</b> cards compare the accuracies, and the <b>wire log</b> shows each API call.</li>
+  </ul></li>
+</ul>
 <h2>9. Quick-fire questions</h2>
 <table>
 <tr><th>Question</th><th>Short answer</th></tr>
@@ -128,6 +191,8 @@ DP rule: <code>cost[i][k] = dist(point i, route arc k) + min over k' ≤ k of co
 <tr><td>Why UTM?</td><td>It gives metres, so Euclidean distance is valid at city scale.</td></tr>
 <tr><td>Why STRtree?</td><td>A spatial index finds nearby arcs without checking all 300k arcs.</td></tr>
 <tr><td>Hardcoding?</td><td>None. Every prediction is computed live from the raw files through the API.</td></tr>
+<tr><td>Final model?</td><td>Soft-voting ensemble of tuned LightGBM + XGBoost, then Viterbi (α=1, β=10, U-turn 15): 0.954 pointwise, route F1 about 0.98 on student-test.</td></tr>
+<tr><td>Why Viterbi and not posterior?</td><td>We tested both. Viterbi gives one consistent path and was slightly more accurate.</td></tr>
 </table>
 <p class="small">Who leads which answer: Nikitha leads data, labels, features, models, HMM and API. The teammate leads EDA plots, Folium maps, UI and deployment. <b>Both of you must be able to answer everything.</b> AI assistance was used to help write code and this guide. We disclose it as the policy asks.</p>
 </body></html>

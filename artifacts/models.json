@@ -1,0 +1,75 @@
+[
+ {
+  "key": "lightgbm",
+  "label": "LightGBM (tuned)",
+  "file": "lightgbm_tuned.txt",
+  "type": "lightgbm_native",
+  "colour": "#8c2f39",
+  "student_test": {
+   "top1": 0.905,
+   "macro_f1": 0.9186,
+   "log_loss": 0.1193,
+   "hmm_pointwise": 0.9467
+  },
+  "default": false
+ },
+ {
+  "key": "random_forest",
+  "label": "Random Forest",
+  "file": "random_forest.joblib",
+  "type": "sklearn",
+  "colour": "#1f5f5b",
+  "student_test": {
+   "top1": 0.8994,
+   "macro_f1": 0.9341,
+   "log_loss": 0.0933,
+   "hmm_pointwise": 0.9386
+  },
+  "default": false
+ },
+ {
+  "key": "mlp",
+  "label": "MLP 64-32",
+  "file": "mlp.joblib",
+  "type": "sklearn",
+  "colour": "#b07d1a",
+  "student_test": {
+   "top1": 0.8958,
+   "macro_f1": 0.9346,
+   "log_loss": 0.0835,
+   "hmm_pointwise": 0.9288
+  },
+  "default": false
+ },
+ {
+  "key": "xgboost",
+  "label": "XGBoost",
+  "file": "xgboost.joblib",
+  "type": "sklearn",
+  "colour": "#4a5a78",
+  "student_test": {
+   "top1": 0.9163,
+   "macro_f1": 0.9303,
+   "log_loss": 0.0953,
+   "hmm_pointwise": 0.9536
+  }
+ },
+ {
+  "key": "ensemble",
+  "label": "Ensemble (LGBM-tuned + XGB)",
+  "file": null,
+  "type": "ensemble",
+  "members": [
+   "lightgbm",
+   "xgboost"
+  ],
+  "colour": "#5d6b2e",
+  "default": true,
+  "student_test": {
+   "macro_f1": 0.9256,
+   "log_loss": 0.1048,
+   "top1": 0.9128,
+   "hmm_pointwise": 0.9535
+  }
+ }
+]

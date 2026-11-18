@@ -1,0 +1,21 @@
+{
+ "python": "3.14.2",
+ "sklearn": "1.9.1",
+ "lightgbm": "4.7.0",
+ "numpy": "2.5.5",
+ "pandas": "3.1.1",
+ "optuna": "5.1.0",
+ "tuned_params": {
+  "num_leaves": 27,
+  "learning_rate": 0.030414301927230828,
+  "n_estimators": 250,
+  "min_child_samples": 72,
+  "subsample": 0.7015714980526496,
+  "colsample_bytree": 0.41494955083528623,
+  "reg_lambda": 0.017041058867578646,
+  "subsample_freq": 1,
+  "scale_pos_weight": 7.379099002065301
+ },
+ "optuna_trials": 30,
+ "optuna_minutes": 4.973751548926035
+}
