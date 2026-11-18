@@ -356,6 +356,7 @@ details.qa div { padding: 0 0 14px 24px; color: var(--ink2); }
       <tr><td><b>Top-1 accuracy ★</b></td><td>Per GPS dot: is the highest-scoring option the correct road? Our main metric.</td></tr>
       <tr><td><b>Continuity</b></td><td>Share of consecutive dots whose roads actually connect.</td></tr>
       <tr><td><b>Route F1</b></td><td>Compares the set of roads in our route with the true route, weighted by length.</td></tr>
+      <tr><td><b>Length error</b></td><td>(length wrongly added + length wrongly missed) ÷ length of the true route. 0% is perfect, lower is better (Newson &amp; Krumm's route mismatch fraction). Ensemble + HMM on the evaluator trips: 0.1% to 6.7% on 9 trips, 24% on trip 15.</td></tr>
     </table>
     <h3>Testing fairly: GroupKFold</h3>
     <p>Dots from the same trip look almost the same. If some go into training and others into testing, the model is tested on things it has basically seen. That is <b>leakage</b>. GroupKFold keeps <b>every trip whole</b> inside one fold.</p>
@@ -961,6 +962,7 @@ details.qa div { padding: 0 0 14px 24px; color: var(--ink2); }
     ["Did the HMM always help?", "It helped 9 of 10 trips. Trip 7 dropped (90.5% → 88.6%) because its slow parking-style ending has unreliable heading."],
     ["How do the two laptops talk?", "The UI sends HTTP requests (GET /trips, POST /predict) to the Mac's IP on port 8000. The server returns JSON. The reference route stays on the server."],
     ["Is anything hardcoded?", "No. Every prediction is computed live from the raw files through the API; the server logs each request."],
+    ["What is the length error?", "Length error = (d− + d+) / d0: d0 is the length of the true route, d− the true-route length we missed, d+ the length we added that is not in the true route. 0 is perfect. Example, trip 30: 464 m added + 106 m missed on a 10.2 km route = 5.6%. The raw classifier route on the same trip has 28.7%, so the HMM cuts it a lot."],
     ["Limitations?", "Labels are derived, not perfect truth; junctions and out-and-back roads are ambiguous; candidate miss rate caps accuracy."],
   ];
   $("#qaList").innerHTML = QA.map(([q, a]) => `<details class="qa"><summary>${q}</summary><div>${a}</div></details>`).join("");
