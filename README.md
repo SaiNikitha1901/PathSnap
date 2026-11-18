@@ -11,7 +11,9 @@ UE24CS352A Machine Learning hackathon. This project snaps noisy 1 Hz GPS tracks 
 | `artifacts/` | exported model + configs (Phase 2) |
 | `server/` | FastAPI backend (Phase 2) |
 | `ui/` | evaluator UI (Phase 2) |
-| `docs/` | viva guide |
+| `docs/` | viva guide and the interactive project explainer (`pathsnap_explained.html`) |
+| `experiments/` | development experiment scripts behind the accuracy-improvement analysis (see `experiments/README.md`) |
+| `scripts/` | `run_evaluator_trips.py` (final evaluation run, writes `results/evaluator_run.csv`), `make_length_error_maps.py` (length-error Folium maps) |
 
 ## Notebooks
 | Notebook | What it does |
@@ -20,7 +22,12 @@ UE24CS352A Machine Learning hackathon. This project snaps noisy 1 Hz GPS tracks 
 | `02_bayesopt_hmm_export.ipynb` | Optuna TPE tuning of LightGBM, tuned vs untuned, HMM decoder tuning, classifier-only vs HMM, Folium route maps, export of `artifacts/` |
 | `03_extended_models_ensemble.ipynb` | Extra models (HistGB, XGBoost, AdaBoost, calibrated linear SVM, deep MLP) + soft-voting ensemble |
 
-Each notebook also has an `_executed` copy that keeps the outputs of our run.
+Each notebook also has an `_executed` copy that keeps the outputs of our run. Notebook 01's executed outputs were produced with the 18-feature set at commit `6f024ed`; notebooks 02 and 03 use the current 23-feature set. To reproduce round 1 exactly, check out `6f024ed`.
+
+Environment for the notebooks: `pip install -r requirements.txt` (exact versions we used).
+
+## Metrics
+Pointwise (Top-1) accuracy against DP-derived per-point labels, macro F1, log loss, candidate miss rate, route continuity, length-weighted route precision / recall / F1, and the **length error** (Newson & Krumm route mismatch fraction) = (length missed + length wrongly added) / reference route length.
 
 ## Two-laptop deployment (final evaluation)
 
