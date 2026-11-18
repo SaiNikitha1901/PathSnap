@@ -1,0 +1,133 @@
+<!doctype html><html><head><meta charset="utf-8"><title>PathSnap Viva Guide</title>
+<style>
+body{font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:11pt;line-height:1.45;margin:28px 34px;color:#111}
+h1{font-size:20pt;margin:0 0 4px}h2{font-size:14pt;border-bottom:2px solid #1a7f6e;padding-bottom:2px;margin-top:20px;color:#0b3d5c}
+h3{font-size:11.5pt;margin:12px 0 4px;color:#1a7f6e}
+.qa{margin:6px 0 8px}.q{font-weight:700}.a{margin-left:12px}
+.box{background:#eef6f4;border-left:4px solid #1a7f6e;padding:6px 10px;margin:8px 0}
+table{border-collapse:collapse;width:100%;font-size:10pt;margin:6px 0}td,th{border:1px solid #bbb;padding:4px 6px;text-align:left;vertical-align:top}th{background:#e8eef3}
+code{background:#f2f2f2;padding:0 3px;border-radius:3px}
+.small{font-size:9.5pt;color:#444}
+</style></head><body>
+<h1>PathSnap: Viva Guide</h1>
+<div class="small">UE24CS352A ML Hackathon · Team guide · Batch 1 (EDA + models) first, then Batch 2 (Bayesian, HMM, API, UI)</div>
+
+<div class="box"><b>The problem in one line:</b> GPS points from a car are noisy (they jump around by 5–40 m). We must find <b>which road segment (arc) the car was really on</b> at every GPS point, and then join these into a <b>connected route</b>. This is called <b>map matching</b>.</div>
+
+<h2>0. YOUR NUMBERS (from our Notebook 01 run, learn these)</h2>
+<table>
+<tr><th>Model</th><th>CV macro F1 (±std)</th><th>CV Top-1</th><th>Student-test Top-1</th><th>Test macro F1</th><th>Test log loss</th><th>Continuity</th><th>Train time</th></tr>
+<tr><td><b>LightGBM (best)</b></td><td>0.909 ± 0.023</td><td>0.867</td><td><b>0.903</b></td><td>0.914</td><td>0.114</td><td>0.988</td><td>4.6 s</td></tr>
+<tr><td>Random Forest</td><td>0.917 ± 0.021</td><td>0.865</td><td>0.896</td><td>0.922</td><td>0.107</td><td>0.986</td><td>21.9 s</td></tr>
+<tr><td>MLP</td><td>0.920 ± 0.011</td><td>0.860</td><td>0.892</td><td>0.926</td><td><b>0.089</b></td><td>0.986</td><td>14.5 s</td></tr>
+<tr><td>Extra Trees</td><td>0.906 ± 0.021</td><td>0.860</td><td>0.888</td><td>0.913</td><td>0.136</td><td>0.982</td><td>10.4 s</td></tr>
+<tr><td>KNN (k=25)</td><td>0.910 ± 0.013</td><td>0.848</td><td>0.882</td><td>0.919</td><td>0.149</td><td>0.980</td><td>0.05 s (but slowest to predict: 211 ms / 1k rows)</td></tr>
+<tr><td>Logistic Regression</td><td>0.853 ± 0.020</td><td>0.848</td><td>0.880</td><td>0.861</td><td>0.190</td><td>0.984</td><td>0.5 s</td></tr>
+<tr><td>Gaussian NB (worst)</td><td>0.824 ± 0.028</td><td>0.835</td><td>0.853</td><td>0.820</td><td><b>0.708</b></td><td>0.978</td><td>0.1 s</td></tr>
+</table>
+<ul>
+<li><b>Why LightGBM?</b> It has the highest Top-1 on both CV (0.867) and student-test (0.903), which is our primary metric. Its log loss is good (0.114), it trains in 4.6 s, and it predicts fast. The MLP has a better macro F1 and log loss, but a lower Top-1. Top-1 is what decides the matched road, so we chose LightGBM. The MLP is our backup.</li>
+<li><b>Overfitting evidence:</b> KNN has a train macro F1 of <b>1.000</b> but a CV F1 of 0.910. It memorises the training set, because distance weighting gives every training row a perfect match to itself. Random Forest: train 0.944 vs CV 0.917, a small gap. Naive Bayes: train 0.821 ≈ CV 0.824, so it underfits (too simple). It also has a very bad log loss of 0.708, meaning over-confident probabilities, because it assumes the features are independent.</li>
+<li><b>Data:</b> 0 NaN, 0 invalid, 0 out-of-order and 0 duplicate rows. 94% of steps are exactly 1 s. 47 of the 90 trips have gaps over 5 s, 1,260 such gaps in total. Anomalies: trip 90 has a <b>153,064 s (about 42 h)</b> gap and trip 78 has a 52,810 s gap. Our HMM restarts the chain after a 60 s gap. The trips span <b>25 different UTM zones</b>, so they come from all over the world. No isolated nodes. The median trip graph has 107 strongly connected components (cut-off edges at the border of the map extract).</li>
+<li><b>Candidates:</b> the miss rate is 3.1% on train and 0.24% on student-test. That is the ceiling: no model can get those points right. Label distance median / p95: 8.2 m / 24.5 m (train) and 5.1 m / 16.5 m (student-test).</li>
+<li><b>Sampling note:</b> every model was fitted on the same random 25,000 GPS points per CV fold (all of their candidates). The final fit used 50,000 points. Each fold was scored on 8,000 validation points. Same sample and same features for every model, so the comparison is fair, and it keeps Colab time short.</li>
+</ul>
+<h2>1. The dataset (know this cold)</h2>
+<table>
+<tr><th>File</th><th>Columns (no header)</th><th>Meaning</th></tr>
+<tr><td><code>.track</code></td><td>longitude, latitude, time (s)</td><td>The GPS points. About 1 point per second (1 Hz).</td></tr>
+<tr><td><code>.nodes</code></td><td>longitude, latitude</td><td>Road junctions/points. The row number is the node id (starting at 0).</td></tr>
+<tr><td><code>.arcs</code></td><td>from_node, to_node</td><td>Road segments. The row number is the arc id. <b>Directed</b>: A→B and B→A are two different arcs (two driving directions).</td></tr>
+<tr><td><code>.route</code></td><td>arc_id</td><td>The reference route: the arcs the car drove, in order (the ground truth).</td></tr>
+</table>
+<ul>
+<li><b>Partitions:</b> 80 train trips, 10 student-test trips, 10 evaluator trips (hidden, used only on the final day).</li>
+<li><b>Size:</b> about 208,000 GPS points in train and about 19,000 in student-test. Road networks differ a lot per trip: from about 1,000 nodes up to 88,000 nodes, and up to about 300,000 arcs.</li>
+<li><b>Worldwide:</b> trips are in many different places (different UTM zones), not only one city.</li>
+<li><b>Time gaps:</b> most steps are exactly 1 s. A few are 2–16 s (GPS dropouts).</li>
+<li><b>Key surprise:</b> the route is a list of <b>arcs</b>, not one label per GPS point. Example: trip 1 has 1,315 GPS points but only 525 route arcs. Some short arcs have <b>no</b> GPS point on them at all. So <b>we had to create a label for each point ourselves</b> (Section 3).</li>
+<li>"A row in the GPS file does not correspond to a row in the road file". The PDF warns about this, and this is exactly why.</li>
+</ul>
+
+<h2>2. Preprocessing</h2>
+<div class="qa"><div class="q">Q: How did you clean the data?</div><div class="a">We removed rows that are not numbers or have impossible coordinates (|lon| &gt; 180, |lat| &gt; 90). We sorted by time and dropped duplicate timestamps. We report how many rows each step removed (the missing-value analysis).</div></div>
+<div class="qa"><div class="q">Q: Why not use plain distance in degrees?</div><div class="a">Longitude and latitude are <b>angles</b>, not metres. One degree of longitude gets shorter as you move away from the equator. So we <b>project to UTM</b> (a flat map in metres). We pick the UTM zone from each trip's own longitude (zone = floor((lon+180)/6)+1). After that, normal Euclidean distance is in real metres.</div></div>
+<div class="qa"><div class="q">Q: Which partition was used for EDA?</div><div class="a">Train for the statistics and model fitting. Student-test only for comparing models. We never touched the evaluator trips.</div></div>
+
+<h2>3. Making a label for every GPS point (our own idea)</h2>
+<div class="qa"><div class="q">Q: The route has no per-point labels. How did you get them?</div><div class="a">We used <b>monotonic alignment with dynamic programming</b>. The car drives the route in order, so point 1 must be on an earlier (or the same) route arc than point 2, and so on. Among all assignments that never go backwards, we choose the one that gives the <b>smallest total distance</b> from the points to their arcs. Each point's distance is capped at 100 m, so one crazy GPS jump cannot spoil the alignment.<br>
+DP rule: <code>cost[i][k] = dist(point i, route arc k) + min over k' ≤ k of cost[i-1][k']</code>. Then we back-track.</div></div>
+<div class="qa"><div class="q">Q: Is that label perfect?</div><div class="a">No. It is <b>derived reference</b>, not physical truth. The median distance from a point to its label arc is about 4.5 m, the 95th percentile is about 16 m, and the 99th percentile is about 37 m. A few trips have points 100+ m away, where the route itself may be imperfect. We say this openly.</div></div>
+
+<h2>4. Candidate generation</h2>
+<div class="qa"><div class="q">Q: What is a candidate?</div><div class="a">For each GPS point we take all arcs within <b>R = 50 m</b>, and keep at most the <b>K = 10 nearest</b>. We find them fast with a spatial index (shapely <b>STRtree</b>), so we never check every arc. Each (point, candidate arc) pair is <b>one row</b> for the classifier.</div></div>
+<div class="qa"><div class="q">Q: Why 50 m and 10?</div><div class="a">From the train data: about 99% of points are within 37 m of their reference arc. With K = 8 the miss rate was already under 1% on most trips, so 50 m / 10 has a small safety margin. Bigger values mean more rows and slower code, for almost no gain.</div></div>
+<div class="qa"><div class="q">Q: What is Candidate Miss Rate?</div><div class="a">The % of GPS points whose true arc is <b>not</b> in their candidate list. No model can get those points right, so it is the ceiling on accuracy.</div></div>
+
+<h2>5. Features (why each one)</h2>
+<table>
+<tr><th>Feature</th><th>Why it helps</th></tr>
+<tr><td>dist, dist_rank, dist_minus_min, dist_ratio</td><td>A closer road is more likely. Comparing against the nearest candidate makes the feature fair across noisy and clean trips.</td></tr>
+<tr><td>heading_diff, cos_heading, heading_valid</td><td>The car's direction (from neighbouring points) vs the arc's direction. <b>This is the only way to tell A→B from B→A</b>, because they lie in the same place. If the car is almost stopped (&lt; 3 m movement), the direction is unreliable, so we flag it.</td></tr>
+<tr><td>win_dist, win_dist_minus_min</td><td>The mean distance of the 5 nearby points (i−2..i+2) to the arc. A parallel street can be close to one noisy point, but not to the whole window.</td></tr>
+<tr><td>proj_t, arc_len</td><td>Where along the arc the point falls (0 = start, 1 = end), and the arc length.</td></tr>
+<tr><td>from_out_deg, to_out_deg</td><td>Junction size (how many roads leave each end).</td></tr>
+<tr><td>speed, dt_prev</td><td>Fast speed suggests a main road. A big dt means a GPS gap.</td></tr>
+<tr><td>near_prev_best, near_next_best</td><td>Is this arc the same as, or connected to, the nearest arc of the previous/next point? This gives continuity information.</td></tr>
+<tr><td>n_cands</td><td>A dense area (many roads) makes matching harder.</td></tr>
+</table>
+<div class="qa"><div class="q">Q: Any leakage?</div><div class="a">No. No feature uses the route file. The route is used <b>only</b> to make the training label and to score results. Every feature can be computed for a brand-new trip.</div></div>
+
+<h2>6. The ML task and metrics</h2>
+<ul>
+<li><b>Task:</b> binary classification. "Is this candidate arc the true arc for this point?" (1/0). Then for each point we pick the candidate with the highest probability. That is <b>Top-1</b>.</li>
+<li><b>Imbalance:</b> only about 1 in 10 rows is positive, so we use <b>class weights</b> and <b>macro F1</b> (the average of the F1 for class 0 and class 1). Plain accuracy would look high even for a model that always says "no".</li>
+<li><b>Observation Top-1 accuracy</b> (our <b>primary</b> metric): % of GPS points where the top candidate equals the reference arc. This is what map matching really cares about.</li>
+<li><b>Log loss:</b> measures how good the probabilities are. It matters because the HMM uses these probabilities.</li>
+<li><b>Route continuity:</b> % of consecutive predictions that are the same arc or connected within 3 arcs in the driving direction.</li>
+<li><b>Validation:</b> <b>GroupKFold (5 folds) grouped by trip</b>. Points from the same trip are very similar, so a normal random split would leak and give over-optimistic scores.</li>
+</ul>
+
+<h2>7. The models we compared (≥ 5, different families)</h2>
+<table>
+<tr><th>Model</th><th>Family</th><th>Why try it / what to say</th></tr>
+<tr><td>Logistic Regression</td><td>Linear</td><td>Simple baseline with good probabilities. Limit: only a linear boundary, so it cannot learn "close <i>and</i> same direction" well. Features are scaled.</td></tr>
+<tr><td>Gaussian Naive Bayes</td><td>Probabilistic</td><td>Very fast. It assumes features are independent, but dist and win_dist are strongly linked, so its probabilities are over-confident (worse log loss).</td></tr>
+<tr><td>KNN (distance-weighted)</td><td>Instance-based</td><td>Labels a row by its most similar rows. Needs scaling. Slow at prediction time on many rows, so we trained it on a sample.</td></tr>
+<tr><td>Random Forest / Extra Trees</td><td>Ensemble (bagging)</td><td>Many trees on random subsets. Learns non-linear rules and is stable. Can overfit if trees are deep (watch the train vs CV gap).</td></tr>
+<tr><td>HistGradientBoosting / LightGBM</td><td>Boosting</td><td>Trees added one after another, each fixing the previous errors. Usually the best on tabular data, fast, and gives good probabilities. <b>Our final choice (Section 0).</b></td></tr>
+<tr><td>MLP (neural net)</td><td>Neural</td><td>Hidden layers learn non-linear combinations. Needs scaling. Has a real loss curve (<code>loss_curve_</code>), so we plot it. Do not draw loss curves for models that have none.</td></tr>
+</table>
+<div class="qa"><div class="q">Q: How did you pick the final model?</div><div class="a">The highest student-test <b>Top-1 accuracy</b>, together with good <b>log loss</b> (because the HMM needs good probabilities), a <b>stable CV</b> score across folds, and fast inference. We did not pick it by training accuracy.</div></div>
+<div class="qa"><div class="q">Q: Overfitting?</div><div class="a">Compare train score vs CV score vs student-test score. A big gap means overfitting (deep trees, KNN with small k). All three being low means underfitting (Naive Bayes, Logistic Regression).</div></div>
+<div class="box">Numbers: see Section 0. LightGBM is the best on Top-1 (0.903 on student-test). Naive Bayes is the worst (0.853, log loss 0.708).</div>
+
+<h2>8. Batch 2 basics (learn after Batch 1)</h2>
+<div class="qa"><div class="q">Q: Bayesian hyperparameter optimisation?</div><div class="a">We use Optuna's <b>TPE</b>. Unlike grid or random search, it <b>learns from past trials</b> which areas of the search space look good, and tries there next. Same GroupKFold, objective = CV Top-1 accuracy, about 40 trials. We report tuned vs untuned.</div></div>
+<div class="qa"><div class="q">Q: Why an HMM at all?</div><div class="a">The classifier looks at each point alone, so two neighbouring points can land on roads that are not even connected. The HMM adds <b>road connectivity over time</b>.</div></div>
+<ul>
+<li><b>Hidden states:</b> the candidate arcs of each point. <b>Observations:</b> the GPS points.</li>
+<li><b>Emission:</b> the classifier probability (normalised over that point's candidates), to a power α, with a small floor ε.</li>
+<li><b>Transition:</b> <code>exp(−|driving distance − straight distance| / β)</code>. If the road distance between two candidates is about the same as the GPS jump, the move is likely. A huge detour is unlikely. The driving distance comes from Dijkstra on the directed road graph.</li>
+<li><b>Unreachable pair:</b> a big fixed penalty, not zero, so the chain never breaks. <b>Large GPS gap:</b> β grows with the gap, and after 60 s the chain restarts. <b>Point with no candidate:</b> skipped, and its gap is filled with the shortest path.</li>
+<li><b>Viterbi:</b> dynamic programming. <code>δ_t(b) = max_a [δ_{t−1}(a) + log T(a,b)] + log E_t(b)</code>. Keep the best previous state for each state, then back-track from the end. Cost: O(T · K²).</li>
+<li><b>Compare</b> classifier-only vs classifier + HMM on pointwise accuracy, continuity and route F1.</li>
+</ul>
+<div class="qa"><div class="q">Q: API and UI?</div><div class="a">Laptop 1 (Nikitha's Mac) runs <b>FastAPI</b> with the model, the road data and the hidden labels. Laptop 2 runs an HTML page with a Leaflet map. The UI asks <code>GET /trips</code> for the list, then sends <code>POST /predict {trip_id}</code>. The server runs the full pipeline, scores it against the labels <b>on the server</b>, and returns only the predicted route and the metrics. The reference route is never sent to the UI. Every request is printed in the server terminal (the API logs).</div></div>
+
+<h2>9. Quick-fire questions</h2>
+<table>
+<tr><th>Question</th><th>Short answer</th></tr>
+<tr><td>Why directed arcs matter?</td><td>Same road, two directions. Heading is the feature that separates them.</td></tr>
+<tr><td>Why GroupKFold?</td><td>Points from one trip are correlated, so splitting a trip across folds is leakage.</td></tr>
+<tr><td>Why macro F1, not accuracy?</td><td>Classes are about 1:9. Macro F1 gives the rare positive class equal weight.</td></tr>
+<tr><td>Why log loss?</td><td>It checks probability quality, and the HMM uses those probabilities.</td></tr>
+<tr><td>What limits the best possible accuracy?</td><td>The candidate miss rate, plus label noise from the alignment.</td></tr>
+<tr><td>Clustering?</td><td>Not used as a classifier. Cluster ids are not labels without a mapping.</td></tr>
+<tr><td>Where are the evaluator trips?</td><td>Only on the server, only at final evaluation, never used for training or tuning.</td></tr>
+<tr><td>Why UTM?</td><td>It gives metres, so Euclidean distance is valid at city scale.</td></tr>
+<tr><td>Why STRtree?</td><td>A spatial index finds nearby arcs without checking all 300k arcs.</td></tr>
+<tr><td>Hardcoding?</td><td>None. Every prediction is computed live from the raw files through the API.</td></tr>
+</table>
+<p class="small">Who leads which answer: Nikitha leads data, labels, features, models, HMM and API. The teammate leads EDA plots, Folium maps, UI and deployment. <b>Both of you must be able to answer everything.</b> AI assistance was used to help write code and this guide. We disclose it as the policy asks.</p>
+</body></html>
