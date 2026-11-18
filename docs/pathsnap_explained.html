@@ -169,14 +169,14 @@ details.qa div { padding: 0 0 14px 24px; color: var(--ink2); }
     <p>Four people, four areas. In the viva anyone can be asked anything, so read all chapters, but <b>your own chapters must be perfect</b>.</p>
     <div class="team">
       <div class="mem" style="--c: var(--red)"><div class="nm"><i></i>Nikitha</div><div class="role">ML lead · runs the server laptop</div>
-        <ul><li>How we made a label for every GPS dot (the DP)</li><li>Features, the 13 models, why LightGBM / Ensemble</li><li>Bayesian tuning with Optuna</li><li>Starts the FastAPI server and shows the API logs</li></ul>
+        <ul><li>How we made a label for every GPS dot (the DP)</li><li>Features</li><li>UI models: <b>LightGBM (tuned)</b> and <b>Ensemble</b>, and why the Ensemble is the final choice</li><li>Bayesian tuning with Optuna</li><li>Starts the FastAPI server and shows the API logs</li></ul>
         <div class="chips"><a class="chip" href="#labels">04</a><a class="chip" href="#features">06</a><a class="chip" href="#models">07</a><a class="chip" href="#tuning">09</a></div></div>
       <div class="mem" style="--c: var(--blue)"><div class="nm"><i></i>Kushal</div><div class="role">Data and EDA</div>
         <ul><li>The problem and the four raw files</li><li>Cleaning, missing values, time gaps (trip 90: 42-hour gap)</li><li>UTM projection: why degrees are not metres</li><li>EDA plots: inventory, connectivity, 25 UTM zones</li></ul>
         <div class="chips"><a class="chip" href="#problem">01</a><a class="chip" href="#data">02</a><a class="chip" href="#clean">03</a></div></div>
       <div class="mem" style="--c: var(--teal)"><div class="nm"><i></i>Namitha</div><div class="role">Candidates, maps and HMM</div>
-        <ul><li>Candidate roads: 50 m, at most 10, STRtree index</li><li>Candidate miss rate (3.1% train, 0.24% test)</li><li>HMM + Viterbi: states, emission, transition, gaps</li><li>Folium maps</li></ul>
-        <div class="chips"><a class="chip" href="#candidates">05</a><a class="chip" href="#hmm">10</a></div></div>
+        <ul><li>Candidate roads: 50 m, at most 10, STRtree index</li><li>Candidate miss rate (3.1% train, 0.24% test)</li><li>UI models: <b>Random Forest</b>, <b>XGBoost</b>, <b>MLP</b></li><li>HMM + Viterbi: states, emission, transition, gaps</li><li>Folium maps</li></ul>
+        <div class="chips"><a class="chip" href="#candidates">05</a><a class="chip" href="#ui-models">07</a><a class="chip" href="#hmm">10</a></div></div>
       <div class="mem" style="--c: var(--gold)"><div class="nm"><i></i>Shobhika</div><div class="role">Metrics, UI and deployment · runs the UI laptop</div>
         <ul><li>Metrics: accuracy, F1, log loss, Top-1, GroupKFold</li><li>Confusion matrices and training curves</li><li>The UI and how it talks to the API</li><li>Two-laptop setup, Wi-Fi / hotspot, screenshots</li></ul>
         <div class="chips"><a class="chip" href="#metrics">08</a><a class="chip" href="#system">11</a></div></div>
@@ -308,8 +308,23 @@ details.qa div { padding: 0 0 14px 24px; color: var(--ink2); }
 
   <!-- 7 MODELS -->
   <section class="ch" id="models" data-t="The models">
-    <div class="chead"><span class="n">07</span><h2>The models, and which one won</h2><span class="owner" style="--c: var(--red)"><i></i>Nikitha</span></div>
+    <div class="chead"><span class="n">07</span><h2>The models, and which one won</h2><span class="owner" style="--c: var(--red)"><i></i>Nikitha · 2 models</span><span class="owner" style="--c: var(--teal)"><i></i>Namitha · 3 models</span></div>
     <p>Every model does the same job: look at one row and say <b>how likely this road is the correct one</b> (0 to 1). For each dot we pick the option with the highest number. Models differ only in <b>how they think</b>.</p>
+    <div id="ui-models" style="scroll-margin-top:20px">
+    <h3>The 5 models we show in the UI (these are the ones we explain)</h3>
+    <p>We trained 13 models to compare, but in the viva we explain only the 5 in the UI. <b>Nikitha explains LightGBM and the Ensemble</b> (the final choice). <b>Namitha explains Random Forest, XGBoost and the MLP.</b> All numbers are student-test (10 trips, 19,160 dots) with the 23-feature set.</p>
+    <div class="scroll"><table class="t">
+      <tr><th>Model</th><th>Who</th><th>Family</th><th>Raw Top-1</th><th>+ HMM</th><th>Macro F1</th><th>Log loss</th></tr>
+      <tr><td><b>Ensemble ★</b></td><td>Nikitha</td><td>averaging</td><td class="num">91.3%</td><td class="num"><b>95.4%</b></td><td class="num">0.926</td><td class="num">0.105</td></tr>
+      <tr><td><b>LightGBM (tuned)</b></td><td>Nikitha</td><td>boosting</td><td class="num">90.5%</td><td class="num">94.7%</td><td class="num">0.919</td><td class="num">0.119</td></tr>
+      <tr><td><b>XGBoost</b></td><td>Namitha</td><td>boosting</td><td class="num">91.6%</td><td class="num">95.4%</td><td class="num">0.930</td><td class="num">0.095</td></tr>
+      <tr><td><b>Random Forest</b></td><td>Namitha</td><td>bagging</td><td class="num">89.9%</td><td class="num">93.9%</td><td class="num">0.934</td><td class="num">0.093</td></tr>
+      <tr><td><b>MLP 64-32</b></td><td>Namitha</td><td>neural network</td><td class="num">89.6%</td><td class="num">92.9%</td><td class="num">0.935</td><td class="num">0.084</td></tr>
+    </table></div>
+    <div class="controls" style="margin:14px 0 4px"><button class="b on" data-um="ens">Ensemble · Nikitha</button><button class="b" data-um="lgb">LightGBM · Nikitha</button><button class="b" data-um="xgb">XGBoost · Namitha</button><button class="b" data-um="rf">Random Forest · Namitha</button><button class="b" data-um="mlp">MLP · Namitha</button></div>
+    <div class="plate" id="umCard"></div>
+    </div>
+    <h3>The other 8 models (only if asked)</h3>
     <div class="modelcards" id="modelCards"></div>
     <div class="plate">
       <div class="cap"><span>Plate 7 · Student-test accuracy (share of dots on the right road)</span><span>light = classifier alone · dark = + HMM</span></div>
@@ -707,6 +722,56 @@ details.qa div { padding: 0 0 14px 24px; color: var(--ink2); }
     ["MLP (neural network)", "neural", "Layers of small neurons learn combinations of clues. Trained in epochs with a loss curve.", "Best probabilities (log loss 0.084–0.089)."],
     ["Ensemble ★", "averaging", "Averages LightGBM and XGBoost probabilities.", "Two strong, slightly different opinions are safer than one."],
   ];
+  const UM = {
+    ens: { name: "Ensemble (LightGBM tuned + XGBoost)", who: "Nikitha", c: "--red",
+      how: "Runs two models on the same row and <b>averages their probabilities</b> (soft voting): p = (p_LightGBM + p_XGBoost) / 2. Then the HMM uses that averaged probability as its emission.",
+      analogy: "Asking two strong experts who think slightly differently and taking the average opinion. When one makes a random mistake, the other often corrects it.",
+      config: "Members: tuned LightGBM + XGBoost. Equal weights. We tested 10 combinations (adding RF and MLP too); this pair was best.",
+      strengths: "Best result with the HMM (95.4% student-test, <b>95.7% on the 10 evaluator trips</b>). More stable than one model. Still fast (two tree models).",
+      limits: "Twice the inference work of one model. Its raw Top-1 (91.3%) is not higher than XGBoost alone (91.6%); the gain shows up after the HMM. Adding RF/MLP made it worse (≈94.0%), because their probabilities were less sharp.",
+      fit: "No overfitting sign: student-test and evaluator scores are close (95.4% vs 95.7%).",
+      say: "We average the probabilities of tuned LightGBM and XGBoost, then decode with Viterbi. Out of 10 ensembles we tried, this one was best on student-test, so it is our final model. We chose it on student-test only; the evaluator trips were run once at the end." },
+    lgb: { name: "LightGBM (tuned)", who: "Nikitha", c: "--plum",
+      how: "Gradient boosting: builds decision trees <b>one after another</b>. Each new tree is trained on the mistakes (gradients of the log loss) of all the trees before it. LightGBM grows trees leaf-wise and uses histograms of feature values, which makes it very fast.",
+      analogy: "A student who keeps re-studying only the questions they got wrong.",
+      config: "Tuned by Optuna (30 trials): num_leaves 27, learning_rate 0.030, n_estimators 250, min_child_samples 72, subsample 0.70, colsample_bytree 0.41, reg_lambda 0.017, scale_pos_weight 7.38 (for the 1:9 imbalance). Loss: binary log loss.",
+      strengths: "Best on tabular data with mixed features; learns combinations like 'close AND same direction'; fast (0.53 s for the whole student-test); good probabilities for the HMM.",
+      limits: "Many hyperparameters. Tuning raised CV Top-1 only from 0.888 to 0.891 and lowered student-test (91.7% → 90.5%): Optuna searched on 20k-dot samples and picked a small model that underfits on all 1.2 M rows.",
+      fit: "Train vs CV gap is small (round 1: train F1 0.937 vs CV 0.909). The per-round log-loss curve flattens without the validation curve rising, so no clear overfitting.",
+      say: "Boosting adds trees one by one, each fixing the previous mistakes. We tuned it with Optuna; the tuned model is faster but not more accurate on student-test, and we explain why. It is one of the two members of our final Ensemble." },
+    xgb: { name: "XGBoost", who: "Namitha", c: "--blue",
+      how: "Also gradient boosting, like LightGBM, but trees are grown <b>level by level</b> (depth-wise) and it adds regularisation on leaf weights. We used the fast 'hist' method.",
+      analogy: "Same 'learn from your mistakes' idea as LightGBM, but each tree is built as a balanced, depth-limited tree.",
+      config: "400 trees, learning_rate 0.05, max_depth 7, tree_method 'hist', class weight for the 1:9 imbalance. Loss: binary log loss.",
+      strengths: "Highest raw Top-1 of the five (91.6%) and joint-best with HMM (95.4%). Good probabilities (log loss 0.095). Strong CV (macro F1 0.934).",
+      limits: "Slower to train than LightGBM; depth and learning rate must be balanced or it overfits.",
+      fit: "CV macro F1 0.934 ± 0.016 and student-test macro F1 0.930 are close: it generalises well.",
+      say: "XGBoost is boosting with depth-wise trees and regularisation. It had the best raw accuracy, so we combined it with LightGBM in the Ensemble." },
+    rf: { name: "Random Forest", who: "Namitha", c: "--teal",
+      how: "Builds <b>150 decision trees</b>. Each tree sees a random sample of rows (bootstrap) and random features at each split. For a new row every tree votes, and the probability is the share of 'yes' votes. This is called bagging.",
+      analogy: "A committee of 150 experts, each trained on different examples; the majority decides.",
+      config: "150 trees, max_depth 14, min_samples_leaf 5, class_weight 'balanced_subsample'. Each tree splits on Gini impurity.",
+      strengths: "Stable and hard to break; learns non-linear rules; good probabilities (log loss 0.093). Best macro F1 among tree models in the UI (0.934).",
+      limits: "Lower Top-1 (89.9%) than boosting: averaging many trees is less sharp at ranking the single best candidate. Big file (44 MB).",
+      fit: "Mild overfitting: train macro F1 0.944 vs CV 0.917 (round 1). Depth 14 and leaf 5 keep it under control.",
+      say: "Random Forest averages many trees trained on random parts of the data. It is stable with good probabilities, but boosting ranked the correct road first more often." },
+    mlp: { name: "MLP 64-32 (neural network)", who: "Namitha", c: "--gold",
+      how: "A small neural network: the 23 features go into 64 neurons, then 32 neurons, then 1 output (probability). Each neuron multiplies inputs by weights, adds them, and applies ReLU. Trained with the Adam optimiser in epochs; the features are standardised first.",
+      analogy: "Layers of tiny decision makers that together learn complicated combinations of the clues.",
+      config: "Hidden layers (64, 32), ReLU, Adam, alpha 1e-4 (L2), batch 512, max 40 epochs, early stopping on a 10% hold-out. Loss: log loss (cross-entropy).",
+      strengths: "<b>Best probabilities</b> of the five (log loss 0.084) and best macro F1 (0.935). Has a real training curve we can show.",
+      limits: "Lowest Top-1 of the five (89.6%), and 92.9% with HMM. Needs scaling; sensitive to settings; slower to train.",
+      fit: "The loss curve drops and early stopping halts training when the validation score stops improving, so it does not overfit.",
+      say: "The MLP learns combinations of features through hidden layers and gives the most trustworthy probabilities, but it picks the right road a little less often than boosting." },
+  };
+  function drawUM(k) {
+    const m = UM[k];
+    $("#umCard").innerHTML = `<div class="cap"><span style="color:var(${m.c})">${m.name}</span><span>explained by ${m.who}</span></div>
+      <table class="t"><tr><td style="width:150px"><b>How it works</b></td><td>${m.how}</td></tr><tr><td><b>In everyday words</b></td><td>${m.analogy}</td></tr><tr><td><b>Settings + loss</b></td><td>${m.config}</td></tr><tr><td><b>Strengths</b></td><td>${m.strengths}</td></tr><tr><td><b>Limitations</b></td><td>${m.limits}</td></tr><tr><td><b>Over/underfitting?</b></td><td>${m.fit}</td></tr></table>
+      <div class="say" style="margin-bottom:0"><b>Say it like this</b>"${m.say}"</div>`;
+    $$("[data-um]").forEach((b) => b.classList.toggle("on", b.dataset.um === k));
+  }
+  $$("[data-um]").forEach((b) => b.onclick = () => drawUM(b.dataset.um)); drawUM("ens");
   $("#modelCards").innerHTML = MODELS.map(([n, f, h, a]) => `<div class="mc"><div class="top"><b>${n}</b><span class="fam">${f}</span></div><p>${h}</p><div class="an">${a}</div></div>`).join("");
   const CHART = [
     ["Round 1 · 18 features", null, null],
