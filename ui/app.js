@@ -10,11 +10,21 @@
   const state = { api: "", models: [], trips: [], sel: null, on: {}, mode: {}, result: null, idx: 0, playing: null, log: [] };
 
   // ---------- map ----------
-  const map = L.map("map", { zoomControl: false, preferCanvas: false, worldCopyJump: true }).setView([30, 20], 3);
+  const map = L.map("map", { zoomControl: false, worldCopyJump: true, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 110, inertiaDeceleration: 2200, zoomAnimation: true, fadeAnimation: true, markerZoomAnimation: true }).setView([30, 20], 3);
   L.control.zoom({ position: "bottomright" }).addTo(map);
-  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19, attribution: "&copy; OpenStreetMap contributors",
-  }).addTo(map);
+  const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/";
+  const BASES = {
+    Streets: L.tileLayer(ESRI + "World_Street_Map/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, attribution: "Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors" }),
+    Satellite: L.layerGroup([
+      L.tileLayer(ESRI + "World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics" }),
+      L.tileLayer(ESRI + "Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19 }),
+      L.tileLayer(ESRI + "Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, opacity: 0.6 }),
+    ]),
+    Topographic: L.tileLayer(ESRI + "World_Topo_Map/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, attribution: "Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors" }),
+    OpenStreetMap: L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" }),
+  };
+  BASES.Streets.addTo(map);
+  L.control.layers(BASES, null, { position: "bottomright", collapsed: true }).addTo(map);
   [["net", 402], ["gps", 405], ["routes", 410], ["cursor", 440]].forEach(([n, z]) => { map.createPane(n); map.getPane(n).style.zIndex = z; });
   const R = { net: L.canvas({ pane: "net" }), gps: L.canvas({ pane: "gps" }), routes: L.svg({ pane: "routes", padding: 0.5 }), cursor: L.svg({ pane: "cursor" }) };
   const G = { net: L.layerGroup().addTo(map), gps: L.layerGroup().addTo(map), routes: L.layerGroup().addTo(map), cursor: L.layerGroup().addTo(map) };
@@ -78,7 +88,7 @@
   function selectTrip(id) {
     state.sel = id; renderTrips();
     const t = state.trips.find((x) => x.trip_id === id);
-    if (t) map.flyToBounds([[t.bbox[0], t.bbox[1]], [t.bbox[2], t.bbox[3]]], { paddingTopLeft: [380, 110], paddingBottomRight: [400, 140], duration: 1.0 });
+    if (t) { state.bounds = L.latLngBounds([[t.bbox[0], t.bbox[1]], [t.bbox[2], t.bbox[3]]]); fitTrip(1.6); }
   }
 
   function renderModels() {
@@ -99,6 +109,15 @@
     });
   }
 
+  function pads() {
+    const small = innerWidth < 860;
+    const left = !small && !document.body.classList.contains("hide-left") ? 380 : 40;
+    const right = !small && !document.body.classList.contains("hide-right") && !$("results").classList.contains("hidden") ? 400 : 40;
+    const bottom = $("timeline").classList.contains("hidden") ? 40 : 140;
+    return { paddingTopLeft: [left, 110], paddingBottomRight: [right, bottom] };
+  }
+  function fitTrip(dur) { if (state.bounds) map.flyToBounds(state.bounds, { ...pads(), duration: dur || 1.2, easeLinearity: 0.15 }); }
+  window.__fit = fitTrip;
   const activeKeys = () => state.models.filter((m) => state.on[m.key]).map((m) => m.key);
   function updateRunBtn() { $("runBtn").disabled = !(state.sel && activeKeys().length); }
 
@@ -131,7 +150,8 @@
     if (a) { L.marker([a[0], a[1]], { pane: "cursor", icon: L.divIcon({ className: "", html: '<div class="pin">Start</div>', iconSize: null, iconAnchor: [-8, 12] }) }).addTo(G.net);
              L.marker([b[0], b[1]], { pane: "cursor", icon: L.divIcon({ className: "", html: '<div class="pin end">End</div>', iconSize: null, iconAnchor: [-8, 12] }) }).addTo(G.net); }
     const lats = r.gps.map((g) => g[0]), lons = r.gps.map((g) => g[1]);
-    map.flyToBounds([[Math.min(...lats), Math.min(...lons)], [Math.max(...lats), Math.max(...lons)]], { paddingTopLeft: [380, 110], paddingBottomRight: [400, 150], duration: 0.8 });
+    state.bounds = L.latLngBounds([[Math.min(...lats), Math.min(...lons)], [Math.max(...lats), Math.max(...lons)]]);
+    fitTrip(1.4);
   }
 
   const near = (a, b) => Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[1] - b[1]) < 1e-6;
@@ -277,6 +297,10 @@
     const step = (t) => { const k = Math.min(1, (t - t0) / 180); cursor(from + (target - from) * (1 - Math.pow(1 - k, 3))); if (k < 1) glideTo.h = requestAnimationFrame(step); };
     glideTo.h = requestAnimationFrame(step);
   }
+  const toggleSide = (side) => { document.body.classList.toggle("hide-" + side); setTimeout(() => { map.invalidateSize({ pan: false }); fitTrip(0.9); }, 420); };
+  $("hideLeft").onclick = () => toggleSide("left");
+  $("hideRight").onclick = () => toggleSide("right");
+  $("fitBtn").onclick = () => fitTrip(1.0);
   $("logBtn").onclick = () => $("logDrawer").classList.toggle("hidden");
   $("logClose").onclick = () => $("logDrawer").classList.add("hidden");
   document.addEventListener("keydown", (e) => {

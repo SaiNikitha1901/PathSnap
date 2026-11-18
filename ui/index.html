@@ -33,6 +33,7 @@
 </header>
 
 <!-- left panel -->
+<button id="hideLeft" class="fold fold-left glass" aria-label="Hide or show the left panel" title="Hide / show panel"><svg viewBox="0 0 20 20" width="16" height="16"><path d="M12 4l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 <aside class="panel left glass">
   <section>
     <div class="sec-head"><span class="step">1</span><h2>Choose a journey</h2><span id="tripCount" class="muted"></span></div>
@@ -50,6 +51,8 @@
 </aside>
 
 <!-- right panel -->
+<button id="hideRight" class="fold fold-right glass" aria-label="Hide or show the results panel" title="Hide / show results"><svg viewBox="0 0 20 20" width="16" height="16"><path d="M8 4l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+<button id="fitBtn" class="fitbtn glass" title="Show the whole trip">Fit trip</button>
 <aside id="results" class="panel right glass hidden">
   <div class="sec-head"><span class="step">3</span><h2>Results</h2><span id="tripTag" class="muted mono"></span></div>
   <div id="summary" class="summary"></div>

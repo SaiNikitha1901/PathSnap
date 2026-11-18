@@ -196,3 +196,24 @@ input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 
 .models { flex: none; }
 .panel::-webkit-scrollbar, .trips::-webkit-scrollbar { width: 6px; }
 .panel::-webkit-scrollbar-thumb, .trips::-webkit-scrollbar-thumb { background: #cfd3da; border-radius: 6px; }
+
+/* collapsible panels + smoother motion */
+.panel.left, .panel.right { transition: transform .45s cubic-bezier(.2,.8,.2,1), opacity .35s ease; }
+body.hide-left .panel.left { transform: translateX(calc(-100% - 24px)); opacity: 0; pointer-events: none; }
+body.hide-right .panel.right { transform: translateX(calc(100% + 24px)); opacity: 0; pointer-events: none; }
+.timeline { transition: left .45s cubic-bezier(.2,.8,.2,1), right .45s cubic-bezier(.2,.8,.2,1), transform .5s cubic-bezier(.2,.8,.2,1), opacity .5s ease; }
+body.hide-left .timeline { left: 16px; }
+.fold { position: fixed; top: 100px; z-index: 18; width: 30px; height: 44px; border: none; display: grid; place-items: center; cursor: pointer; color: var(--ink); border-radius: 10px; transition: left .45s cubic-bezier(.2,.8,.2,1), right .45s cubic-bezier(.2,.8,.2,1), transform .3s; }
+.fold-left { left: 364px; }
+.fold-right { right: 384px; }
+#results.hidden ~ .fold-right, .fold-right:has(+ .fitbtn + #results.hidden) { display: none; }
+body.hide-left .fold-left { left: 16px; } body.hide-left .fold-left svg { transform: rotate(180deg); }
+body.hide-right .fold-right { right: 16px; } body.hide-right .fold-right svg { transform: rotate(180deg); }
+.fold svg { transition: transform .3s; }
+.fitbtn { position: fixed; top: 152px; right: 384px; z-index: 18; border: none; font: 600 12px Inter, sans-serif; padding: 8px 10px; border-radius: 10px; cursor: pointer; transition: right .45s cubic-bezier(.2,.8,.2,1); }
+body.hide-right .fitbtn { right: 16px; }
+.leaflet-control-layers { border: none !important; border-radius: 12px !important; box-shadow: var(--shadow) !important; font: 500 13px Inter, sans-serif; }
+.leaflet-control-layers-expanded { padding: 10px 14px !important; }
+.leaflet-tile { transition: opacity .35s ease; }
+.leaflet-fade-anim .leaflet-tile { will-change: opacity; }
+@media (max-width: 860px) { .fold, .fitbtn { display: none; } }
