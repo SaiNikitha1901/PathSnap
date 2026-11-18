@@ -8,3 +8,6 @@ data/eval_trips/*
 !data/eval_trips/.gitkeep
 Student folder/
 *.zip
+
+# technical report: kept local until final submission
+report/
