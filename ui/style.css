@@ -44,20 +44,20 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); 
 .btn.ghost:hover { background: #2a3040; }
 .btn.primary { width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 14px; font-size: 15px; background: var(--brand); color: #fff; border-radius: 14px; }
 .btn.primary:hover:not(:disabled) { background: #2b3a5e; }
-.btn.primary:disabled { opacity: .35; cursor: not-allowed; }
+.btn.primary:disabled { background: #c9ced8; color: #f4f5f7; cursor: not-allowed; }
 
 /* panels */
 .panel { position: fixed; top: 92px; bottom: 16px; z-index: 15; padding: 18px; overflow-y: auto; }
 .panel.left { left: 16px; width: 340px; display: flex; flex-direction: column; gap: 18px; bottom: 16px; padding-bottom: 0; }
-.panel.left section { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
-.panel.left section:first-child { flex: 1 1 auto; }
+.panel.left section { display: flex; flex-direction: column; gap: 10px; flex: none; }
+
 .panel.right { right: 16px; width: 360px; bottom: 132px; }
 .sec-head { display: flex; align-items: center; gap: 10px; }
 .sec-head h2 { margin: 0; font: 700 16px "Bricolage Grotesque", sans-serif; letter-spacing: -0.01em; flex: 1; }
 .step { width: 24px; height: 24px; border-radius: 8px; background: var(--ink); color: #fff; display: grid; place-items: center; font: 600 12px Inter; flex: none; }
 .placeholder { color: var(--muted); font-size: 13px; padding: 12px; border: 1.5px dashed var(--line); border-radius: 12px; }
 
-.trips { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 28vh; padding-right: 2px; }
+.trips { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 30vh; padding-right: 4px; overscroll-behavior: contain; }
 .trip { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 12px; cursor: pointer; border: 1.5px solid transparent; transition: background .15s, border-color .15s; }
 .trip:hover { background: #f4f5f7; }
 .trip.sel { background: #fff; border-color: var(--ink); }
@@ -190,4 +190,9 @@ input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 
 
 #runBtn { position: sticky; bottom: 0; margin-top: auto; box-shadow: 0 -14px 18px -6px rgba(255,255,255,.95), var(--shadow); margin-bottom: 16px; flex: none; }
 .model { padding: 8px 10px; }
-.model .ml span { display: block; }
+.model .ml span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
+
+.panel.left { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.models { flex: none; }
+.panel::-webkit-scrollbar, .trips::-webkit-scrollbar { width: 6px; }
+.panel::-webkit-scrollbar-thumb, .trips::-webkit-scrollbar-thumb { background: #cfd3da; border-radius: 6px; }
