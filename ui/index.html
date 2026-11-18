@@ -3,100 +3,108 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PathSnap Field Atlas</title>
+<title>PathSnap · Route Reconstruction</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,400&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="masthead">
-  <div class="mast-left">
-    <div class="kicker">UE24CS352A · Map-matching survey</div>
-    <h1>Path<em>Snap</em></h1>
-    <div class="sub">A field atlas of reconstructed journeys: noisy GPS, snapped to the road network by a classifier and a Viterbi decoder.</div>
-  </div>
-  <div class="mast-right">
-    <label class="smallcaps" for="api">Survey station (API)</label>
-    <div class="api-row">
-      <input id="api" spellcheck="false" placeholder="http://192.168.x.x:8000">
-      <button id="connect" class="btn-ghost">Connect</button>
+<div id="map"></div>
+
+<!-- top bar -->
+<header class="topbar glass">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" class="logo" aria-hidden="true">
+      <path d="M4 24 C10 24, 10 8, 16 8 S 22 24, 28 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="9" cy="14" r="2.4" class="d1"/><circle cx="16" cy="5" r="2.4" class="d2"/><circle cx="23" cy="15" r="2.4" class="d3"/>
+    </svg>
+    <div>
+      <div class="name">PathSnap</div>
+      <div class="tag">Noisy GPS → the road actually driven</div>
     </div>
-    <div class="status"><span id="pip" class="pip"></span><span id="status-text">not connected</span></div>
+  </div>
+  <div class="conn">
+    <span id="connDot" class="dot off"></span>
+    <input id="apiUrl" spellcheck="false" placeholder="http://192.168.x.x:8000" aria-label="API URL">
+    <button id="connectBtn" class="btn ghost">Connect</button>
   </div>
 </header>
 
-<main class="atlas">
-  <aside class="ledger">
-    <section>
-      <h2><span class="num">I.</span> Journeys</h2>
-      <p class="hint">The evaluation trips held by the server. Choose one.</p>
-      <ol id="trips" class="trips"></ol>
-    </section>
-    <section>
-      <h2><span class="num">II.</span> Instruments</h2>
-      <p class="hint">Models to survey with. Each draws its route in its own ink. <b>HMM</b> = Viterbi-decoded route, <b>CLF</b> = classifier only.</p>
-      <ul id="models" class="models"></ul>
-    </section>
-    <button id="run" class="btn-run" disabled>
-      <span class="run-label">Reconstruct route</span>
-      <span class="run-sub" id="run-sub">select a journey</span>
-    </button>
-  </aside>
-
-  <section class="plate">
-    <div class="plate-head">
-      <div>
-        <div class="smallcaps">Plate</div>
-        <div id="plate-title" class="plate-title">No journey selected</div>
-      </div>
-      <div class="plate-meta" id="plate-meta"></div>
-    </div>
-    <div class="map-frame">
-      <div id="map"></div>
-      <div class="corner tl" id="c-tl"></div><div class="corner br" id="c-br"></div>
-      <svg class="compass" viewBox="0 0 60 60" aria-hidden="true">
-        <circle cx="30" cy="30" r="22" fill="none" stroke="currentColor" stroke-width=".8"/>
-        <circle cx="30" cy="30" r="17" fill="none" stroke="currentColor" stroke-width=".4" stroke-dasharray="1 2"/>
-        <path d="M30 6 L35 30 L30 27 L25 30 Z" fill="currentColor"/>
-        <path d="M30 54 L35 30 L30 33 L25 30 Z" fill="none" stroke="currentColor" stroke-width=".8"/>
-        <text x="30" y="5" text-anchor="middle" font-size="7" font-family="Fraunces" fill="currentColor">N</text>
-      </svg>
-      <div class="key" id="key">
-        <div class="smallcaps">Key</div>
-        <div class="key-row"><span class="sw-dot"></span>GPS observation</div>
-        <div class="key-row"><span class="sw-line net"></span>Road network</div>
-        <div id="key-models"></div>
-      </div>
-      <div class="veil" id="veil"><div class="veil-inner"><div class="spinner"></div><div id="veil-text">Surveying…</div></div></div>
-    </div>
-    <div class="timeline">
-      <button id="play" class="btn-play" disabled aria-label="play">▶</button>
-      <div class="scrub-wrap">
-        <input type="range" id="scrub" min="0" max="0" value="0" disabled>
-        <div class="scrub-ticks" id="ticks"></div>
-      </div>
-      <div class="clock"><span id="clock">t = –</span><span id="ptno" class="muted"></span></div>
-    </div>
-    <div class="readout" id="readout"></div>
+<!-- left panel -->
+<aside class="panel left glass">
+  <section>
+    <div class="sec-head"><span class="step">1</span><h2>Choose a journey</h2><span id="tripCount" class="muted"></span></div>
+    <div id="trips" class="trips"><div class="placeholder">Connect to the server to load the evaluation trips.</div></div>
   </section>
-
-  <section class="findings">
-    <h2><span class="num">III.</span> Findings</h2>
-    <p class="hint">Scored on the server against its hidden reference route. The UI never receives the reference.</p>
-    <div id="cards" class="cards"><div class="empty">Run a reconstruction to see the findings.</div></div>
-    <div id="verdict" class="verdict"></div>
+  <section>
+    <div class="sec-head"><span class="step">2</span><h2>Pick models to compare</h2></div>
+    <div id="models" class="models"></div>
+    <div class="mini-legend"><span><i class="ln solid"></i>HMM · Viterbi route</span><span><i class="ln dash"></i>Raw classifier</span></div>
   </section>
-</main>
+  <button id="runBtn" class="btn primary" disabled>
+    <span>Reconstruct route</span>
+    <svg viewBox="0 0 20 20" width="18" height="18"><path d="M4 10h11M11 5l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+</aside>
 
-<footer class="tape">
-  <div class="tape-label smallcaps">Wire log</div>
-  <div id="log" class="log"></div>
-</footer>
+<!-- right panel -->
+<aside id="results" class="panel right glass hidden">
+  <div class="sec-head"><span class="step">3</span><h2>Results</h2><span id="tripTag" class="muted mono"></span></div>
+  <div id="summary" class="summary"></div>
+  <div id="board" class="board"></div>
+  <p class="fineprint">Scored on the server against its hidden reference route. The reference is never sent to this screen.</p>
+</aside>
+
+<!-- timeline -->
+<div id="timeline" class="timeline glass hidden">
+  <button id="playBtn" class="play" aria-label="Play">
+    <svg id="playIcon" viewBox="0 0 20 20" width="18" height="18"><path d="M6 4l10 6-10 6z" fill="currentColor"/></svg>
+  </button>
+  <div class="tl-main">
+    <div class="tl-top">
+      <span id="clock" class="mono">00:00</span>
+      <span id="agree" class="agree"></span>
+      <span id="ptno" class="mono muted"></span>
+    </div>
+    <input id="scrub" type="range" min="0" max="0" value="0" aria-label="Timeline">
+    <div id="chips" class="chips"></div>
+  </div>
+  <select id="speed" class="speed" aria-label="Playback speed">
+    <option value="1">1×</option><option value="4" selected>4×</option><option value="12">12×</option>
+  </select>
+</div>
+
+<!-- empty state -->
+<div id="hero" class="hero glass">
+  <div class="hero-kicker">UE24CS352A · Map-matching</div>
+  <h1>Where did the car <em>really</em> drive?</h1>
+  <ol>
+    <li><b>Connect</b> to the PathSnap server (top right).</li>
+    <li><b>Choose</b> an evaluation journey.</li>
+    <li><b>Compare</b> how each model snaps the noisy GPS to the road.</li>
+  </ol>
+</div>
+
+<!-- loader -->
+<div id="loader" class="loader glass hidden">
+  <div class="spinner"><svg viewBox="0 0 50 50"><circle cx="25" cy="25" r="20"/></svg></div>
+  <div>
+    <div class="ld-title">Reconstructing journey <span id="ldTrip" class="mono"></span></div>
+    <ul id="ldSteps" class="ld-steps">
+      <li>Finding nearby roads (STRtree)</li><li>Computing 23 features</li><li>Scoring candidates</li><li>Viterbi decoding over the road graph</li>
+    </ul>
+  </div>
+</div>
+
+<!-- api log -->
+<button id="logBtn" class="log-btn glass">API log <span id="logCount">0</span></button>
+<div id="logDrawer" class="log glass hidden"><div class="log-head">Requests to the server<button id="logClose" class="x">×</button></div><div id="logList"></div></div>
+
+<div id="toast" class="toast hidden"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/leaflet-polylineoffset@1.1.1/leaflet.polylineoffset.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

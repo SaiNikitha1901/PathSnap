@@ -1,267 +1,293 @@
-/* PathSnap Field Atlas: evaluator UI. It talks only to the PathSnap API. */
+/* PathSnap evaluator UI — talks only to the FastAPI server; never sees reference routes. */
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
-  const store = {
-    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
-    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage unavailable */ } },
-  };
+  const PALETTE = { ensemble: "#e4572e", xgboost: "#2e86ab", lightgbm: "#7b2d8e", random_forest: "#2a9d8f", mlp: "#e9a23b" };
+  const EXTRA = ["#3d5a80", "#c44569", "#6a994e"];
+  const qs = new URLSearchParams(location.search);
+  const ANIM = qs.get("anim") !== "0";
 
-  const state = {
-    api: store.get("pathsnap.api", "http://localhost:8000"),
-    trips: [], models: [], selTrip: null,
-    on: new Set(), mode: {},           // model key -> "hmm" | "clf"
-    result: null, layers: {}, idx: 0, playing: false, timer: null,
-  };
+  const state = { api: "", models: [], trips: [], sel: null, on: {}, mode: {}, result: null, idx: 0, playing: null, log: [] };
 
-  // ---------------- map ----------------
-  const map = L.map("map", { zoomControl: true, attributionControl: true, preferCanvas: false }).setView([20, 0], 2);
-  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap contributors" }).addTo(map);
-  // one pane + renderer per layer so the stacking order is fixed: network < GPS < routes < cursor
-  const R = {};
-  [["net", 405], ["gps", 408], ["routes", 410], ["cursor", 430]].forEach(([n, z]) => { map.createPane(n); map.getPane(n).style.zIndex = z; R[n] = L.svg({ pane: n, padding: 0.3 }); });
-  const svg = R.routes;
-  const groups = { net: L.layerGroup().addTo(map), gps: L.layerGroup().addTo(map), routes: L.layerGroup().addTo(map), cursor: L.layerGroup().addTo(map) };
-  L.control.scale({ imperial: false, position: "bottomright" }).addTo(map);
-  try { new ResizeObserver(() => map.invalidateSize({ pan: false })).observe(document.getElementById("map")); } catch (e) { window.addEventListener("resize", () => map.invalidateSize()); }
-  map.on("move", corners);
-  function corners() {
-    const b = map.getBounds(), f = (v, p, n) => Math.abs(v).toFixed(4) + "°" + (v >= 0 ? p : n);
-    $("c-tl").textContent = f(b.getNorth(), "N", "S") + "  " + f(b.getWest(), "E", "W");
-    $("c-br").textContent = f(b.getSouth(), "N", "S") + "  " + f(b.getEast(), "E", "W");
-  }
-  corners();
+  // ---------- map ----------
+  const map = L.map("map", { zoomControl: false, preferCanvas: false, worldCopyJump: true }).setView([30, 20], 3);
+  L.control.zoom({ position: "bottomright" }).addTo(map);
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+    maxZoom: 16, attribution: "Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors",
+  }).addTo(map);
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}", { maxZoom: 16, opacity: 0.8 }).addTo(map);
+  [["net", 402], ["gps", 405], ["routes", 410], ["cursor", 440]].forEach(([n, z]) => { map.createPane(n); map.getPane(n).style.zIndex = z; });
+  const R = { net: L.canvas({ pane: "net" }), gps: L.canvas({ pane: "gps" }), routes: L.svg({ pane: "routes", padding: 0.5 }), cursor: L.svg({ pane: "cursor" }) };
+  const G = { net: L.layerGroup().addTo(map), gps: L.layerGroup().addTo(map), routes: L.layerGroup().addTo(map), cursor: L.layerGroup().addTo(map) };
 
-  // ---------------- wire log ----------------
-  function log(html, cls) {
-    const d = document.createElement("div"); d.className = "ln " + (cls || "");
-    const t = new Date().toTimeString().slice(0, 8);
-    d.innerHTML = `<span class="muted">${t}</span>  ${html}`;
-    $("log").prepend(d);
-  }
+  // ---------- helpers ----------
+  const colour = (m, i) => PALETTE[m.key] || EXTRA[i % EXTRA.length] || m.colour;
+  const pct = (x) => (x == null ? "–" : (100 * x).toFixed(1));
+  const fmtDur = (s) => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return (h ? h + ":" + String(m).padStart(2, "0") : String(m).padStart(2, "0")) + ":" + String(x).padStart(2, "0"); };
+  const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+  const toast = (msg) => { const t = $("toast"); t.textContent = msg; t.classList.remove("hidden"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.add("hidden"), 3200); };
+
   async function call(method, path, body) {
-    const t0 = performance.now(); const url = state.api.replace(/\/+$/, "") + path;
+    const t0 = performance.now(); let status = 0;
     try {
-      const r = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
-      const txt = await r.text(); const ms = performance.now() - t0;
-      log(`<b>${method}</b> ${path} → <span class="${r.ok ? "ok" : "err"}">${r.status}</span> · ${ms.toFixed(0)} ms · ${(txt.length / 1024).toFixed(1)} kB`, r.ok ? "" : "err");
-      if (!r.ok) throw new Error(`${r.status} ${txt.slice(0, 120)}`);
-      return JSON.parse(txt);
-    } catch (e) {
-      if (!(e instanceof Error && /^\d{3}/.test(e.message))) log(`<b>${method}</b> ${path} → <span class="err">unreachable</span> (${e.message})`, "err");
-      throw e;
+      const r = await fetch(state.api + path, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+      status = r.status;
+      if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+      return await r.json();
+    } finally {
+      state.log.unshift({ t: new Date().toLocaleTimeString(), method, path: path + (body && body.trip_id ? ` · ${body.trip_id}` : ""), status, ms: Math.round(performance.now() - t0) });
+      renderLog();
     }
   }
-  function status(kind, text) { $("pip").className = "pip " + kind; $("status-text").textContent = text; }
 
-  // ---------------- connect ----------------
-  async function connect() {
-    return connectImpl();
+  function renderLog() {
+    $("logCount").textContent = state.log.length;
+    $("logList").innerHTML = state.log.slice(0, 60).map((e) =>
+      `<div class="ent"><span class="muted">${e.t}</span><span>${e.method}</span><span>${e.path}</span><span class="${e.status >= 200 && e.status < 300 ? "ok" : "bad"}">${e.status || "ERR"} · ${e.ms}ms</span></div>`).join("");
   }
-  async function connectImpl() {
-    state.api = $("api").value.trim() || state.api; store.set("pathsnap.api", state.api);
-    status("busy", "contacting " + state.api);
+
+  // ---------- connect ----------
+  async function connect() {
+    state.api = $("apiUrl").value.trim().replace(/\/+$/, "");
+    if (!/^https?:\/\//.test(state.api)) state.api = "http://" + state.api;
+    $("apiUrl").value = state.api; store.set("pathsnap.api", state.api);
+    $("connDot").className = "dot off";
     try {
-      const h = await call("GET", "/health");
+      await call("GET", "/health");
       const [models, trips] = await Promise.all([call("GET", "/models"), call("GET", "/trips")]);
       state.models = models; state.trips = trips;
-      const ranked = [...models].sort((a, b) => (b.student_test?.hmm_pointwise || 0) - (a.student_test?.hmm_pointwise || 0));
-      state.on = new Set(ranked.slice(0, 3).map((m) => m.key));
-      const def = models.find((m) => m.default); if (def) state.on.add(def.key);
-      models.forEach((m) => (state.mode[m.key] = state.mode[m.key] || "hmm"));
-      status("ok", `connected · ${h.models.length} models · ${h.trips} journeys`);
-      renderTrips(); renderModels(); updateRun();
-    } catch (e) { status("err", "cannot reach the API: check the IP, port and Wi-Fi"); }
+      models.forEach((m, i) => { m.c = colour(m, i); m.label = m.label.replace("Ensemble (LGBM-tuned + XGB)", "Ensemble").replace("LightGBM (tuned)", "LightGBM"); if (!(m.key in state.on)) state.on[m.key] = !!m.default || ["xgboost", "random_forest"].includes(m.key); state.mode[m.key] = state.mode[m.key] || "hmm"; });
+      $("connDot").className = "dot on";
+      renderTrips(); renderModels(); toast(`Connected · ${trips.length} journeys · ${models.length} models`);
+    } catch (e) {
+      $("connDot").className = "dot err"; toast("Could not reach the server — check the IP, port and Wi-Fi");
+    }
   }
 
-  // ---------------- ledger ----------------
-  const fmtDur = (s) => { s = Math.round(s); const m = Math.floor(s / 60); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min ${s % 60} s`; };
-  const roman = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x", "xi", "xii", "xiii", "xiv", "xv"];
   function renderTrips() {
-    const ol = $("trips"); ol.innerHTML = "";
-    state.trips.forEach((t, i) => {
-      const li = document.createElement("li"); li.className = "trip" + (state.selTrip === t.trip_id ? " sel" : "");
-      const lat = (t.bbox[0] + t.bbox[2]) / 2, lon = (t.bbox[1] + t.bbox[3]) / 2;
-      li.innerHTML = `<span class="ix">${roman[i] || i + 1}.</span>
-        <span><div class="tid">№ ${t.trip_id}</div><div class="tmeta">${fmtDur(t.duration_s)} · ${lat.toFixed(2)}°, ${lon.toFixed(2)}°</div></span>
-        <span class="tpts">${t.points.toLocaleString()}<br><span class="tmeta">pts</span></span>`;
-      li.onclick = () => { state.selTrip = t.trip_id; renderTrips(); updateRun(); previewTrip(t); };
-      ol.appendChild(li);
-    });
-  }
-  function previewTrip(t) {
-    $("plate-title").textContent = `Journey № ${t.trip_id}`;
-    $("plate-meta").innerHTML = `${t.points.toLocaleString()} observations<br>${fmtDur(t.duration_s)}`;
-    map.flyToBounds([[t.bbox[0], t.bbox[1]], [t.bbox[2], t.bbox[3]]], { padding: [30, 30], duration: 0.9 });
-  }
-  function renderModels() {
-    const ul = $("models"); ul.innerHTML = "";
-    state.models.forEach((m) => {
-      const li = document.createElement("li"); const on = state.on.has(m.key);
-      li.className = "model " + (on ? "on" : "off"); li.style.color = m.colour;
-      const st = m.student_test || {};
-      li.innerHTML = `<span class="sw"></span>
-        <span class="mname" style="color:var(--ink)">${m.label}${m.default ? '<span class="badge" style="color:' + m.colour + '">default</span>' : ""}</span>
-        <span class="seg" data-k="${m.key}"><button data-m="hmm" class="${state.mode[m.key] === "hmm" ? "on" : ""}">HMM</button><button data-m="clf" class="${state.mode[m.key] === "clf" ? "on" : ""}">CLF</button></span>
-        <span class="mstat">dev-test: top-1 ${fmt(st.top1)} · +HMM ${fmt(st.hmm_pointwise)} · F1 ${fmt(st.macro_f1)}</span>`;
-      li.onclick = (ev) => {
-        const b = ev.target.closest("button");
-        if (b) { state.mode[m.key] = b.dataset.m; renderModels(); if (state.result) drawRoutes(false); return; }
-        if (state.on.has(m.key)) state.on.delete(m.key); else state.on.add(m.key);
-        renderModels(); updateRun();
-        if (state.result) drawRoutes(false);
-      };
-      ul.appendChild(li);
-    });
-    renderKey();
-  }
-  function renderKey() {
-    $("key-models").innerHTML = state.models.filter((m) => state.on.has(m.key)).map((m) =>
-      `<div class="key-row" style="color:${m.colour}"><span class="sw-line ${state.mode[m.key] === "clf" ? "dash" : ""}"></span><span style="color:var(--ink)">${m.label} · ${state.mode[m.key].toUpperCase()}</span></div>`).join("");
-  }
-  const fmt = (v, d = 3) => (v === null || v === undefined || isNaN(v) ? "–" : Number(v).toFixed(d));
-  function updateRun() {
-    const ok = state.selTrip && state.on.size > 0;
-    $("run").disabled = !ok;
-    $("run-sub").textContent = !state.selTrip ? "select a journey" : state.on.size === 0 ? "select at least one model" : `№ ${state.selTrip} · ${state.on.size} model${state.on.size > 1 ? "s" : ""}`;
+    $("tripCount").textContent = state.trips.length ? `${state.trips.length} trips` : "";
+    $("trips").innerHTML = state.trips.map((t, i) =>
+      `<div class="trip ${state.sel === t.trip_id ? "sel" : ""}" data-id="${t.trip_id}">
+        <div class="ix">${String(i + 1).padStart(2, "0")}</div>
+        <div><div class="tid">${t.trip_id}</div><div class="meta">${fmtDur(t.duration_s)} · ${((t.bbox[0] + t.bbox[2]) / 2).toFixed(2)}°, ${((t.bbox[1] + t.bbox[3]) / 2).toFixed(2)}°</div></div>
+        <div class="pts">${t.points.toLocaleString()}<div class="meta">points</div></div>
+      </div>`).join("") || `<div class="placeholder">The server has no trips in its data folder.</div>`;
+    document.querySelectorAll(".trip").forEach((el) => el.onclick = () => selectTrip(el.dataset.id));
+    updateRunBtn();
   }
 
-  // ---------------- run ----------------
+  function selectTrip(id) {
+    state.sel = id; renderTrips();
+    const t = state.trips.find((x) => x.trip_id === id);
+    if (t) map.flyToBounds([[t.bbox[0], t.bbox[1]], [t.bbox[2], t.bbox[3]]], { paddingTopLeft: [380, 110], paddingBottomRight: [400, 140], duration: 1.0 });
+  }
+
+  function renderModels() {
+    $("models").innerHTML = state.models.map((m) => {
+      const st = m.student_test || {};
+      return `<div class="model ${state.on[m.key] ? "" : "off"}" data-k="${m.key}" style="--c:${m.c}">
+        <div class="sw" style="background:${m.c}" data-act="tog"></div>
+        <div class="ml" data-act="tog"><b>${m.label}${m.default ? '<span class="def">default</span>' : ""}</b><span>dev-test · raw ${pct(st.top1)}% → HMM ${pct(st.hmm_pointwise)}%</span></div>
+        <div class="seg"><button data-act="hmm" class="${state.mode[m.key] === "hmm" ? "on" : ""}">HMM</button><button data-act="clf" class="${state.mode[m.key] === "clf" ? "on" : ""}">Raw</button></div>
+      </div>`;
+    }).join("");
+    document.querySelectorAll(".model").forEach((el) => el.onclick = (e) => {
+      const k = el.dataset.k, act = e.target.dataset.act; if (!act) return;
+      if (act === "tog") state.on[k] = !state.on[k]; else state.mode[k] = act;
+      renderModels(); updateRunBtn();
+      if (state.result && act !== "tog") { swapRoutes(false); renderBoard(); buildCursor(); }
+      else if (state.result && act === "tog") { const have = state.result.models.map((x) => x.key); if (state.on[k] && !have.includes(k)) run(); else { swapRoutes(false); renderBoard(); buildCursor(); } }
+    });
+  }
+
+  const activeKeys = () => state.models.filter((m) => state.on[m.key]).map((m) => m.key);
+  function updateRunBtn() { $("runBtn").disabled = !(state.sel && activeKeys().length); }
+
+  // ---------- run ----------
   async function run() {
-    if ($("run").disabled) return;
-    stop();
-    $("veil").classList.add("show"); $("veil-text").textContent = `Surveying journey № ${state.selTrip}…`;
-    status("busy", "reconstructing…");
+    const keys = activeKeys(); if (!state.sel || !keys.length) return;
+    stop(); $("hero").classList.add("hidden"); $("loader").classList.remove("hidden"); $("ldTrip").textContent = state.sel;
+    const lis = [...document.querySelectorAll("#ldSteps li")]; lis.forEach((l) => l.classList.remove("on"));
+    let s = 0; const tick = setInterval(() => { if (s < lis.length) lis[s++].classList.add("on"); }, 380);
     try {
-      const keys = state.models.map((m) => m.key);   // ask for every model so toggles are instant
-      const res = await call("POST", "/predict", { trip_id: state.selTrip, models: keys });
-      state.result = res; state.idx = 0;
-      status("ok", `reconstructed № ${res.trip_id} in ${(res.total_ms / 1000).toFixed(2)} s`);
-      drawBase(); drawRoutes(true); renderCards(); setupTimeline();
-    } catch (e) { status("err", "reconstruction failed: " + e.message); }
-    finally { $("veil").classList.remove("show"); }
+      const res = await call("POST", "/predict", { trip_id: state.sel, models: keys });
+      res.models.forEach((m) => { const meta = state.models.find((x) => x.key === m.key); m.c = meta ? meta.c : m.colour; });
+      ["net", "gps", "routes", "cursor"].forEach((p) => map.getPane(p).style.opacity = 0);
+      await new Promise((ok) => setTimeout(ok, 250));
+      state.result = res; state.idx = 0; state.pos = 0; lastChipIdx = -1;
+      drawBase(); drawRoutes(ANIM); renderSummary(); setupTimeline();
+      ["net", "gps", "routes", "cursor"].forEach((p) => map.getPane(p).style.opacity = 1);
+      $("results").classList.remove("hidden"); $("timeline").classList.remove("hidden");
+      requestAnimationFrame(() => { $("results").classList.add("in"); $("timeline").classList.add("in"); renderBoard(); });
+    } catch (e) { toast("Prediction failed: " + e.message.slice(0, 120)); }
+    finally { clearInterval(tick); lis.forEach((l) => l.classList.add("on")); setTimeout(() => $("loader").classList.add("hidden"), 200); }
   }
 
   function drawBase() {
-    const r = state.result; groups.net.clearLayers(); groups.gps.clearLayers();
-    L.polyline(r.network.map((s) => [[s[0], s[1]], [s[2], s[3]]]), { renderer: R.net, color: "#6f675a", weight: 1, opacity: 0.45, interactive: false }).addTo(groups.net);
-    const step = Math.max(1, Math.ceil(r.gps.length / 2500));
-    r.gps.forEach((g, i) => { if (i % step === 0) L.circleMarker([g[0], g[1]], { renderer: R.gps, radius: 1.6, stroke: false, fill: true, fillColor: "#1d1b17", fillOpacity: 0.4, interactive: false }).addTo(groups.gps); });
+    const r = state.result; G.net.clearLayers(); G.gps.clearLayers();
+    L.polyline(r.network.map((s) => [[s[0], s[1]], [s[2], s[3]]]), { renderer: R.net, color: "#7d8597", weight: 1.2, opacity: 0.35, interactive: false }).addTo(G.net);
+    const step = Math.max(1, Math.ceil(r.gps.length / 3000));
+    r.gps.forEach((g, i) => { if (i % step === 0) L.circleMarker([g[0], g[1]], { renderer: R.gps, radius: 2.2, stroke: false, fill: true, fillColor: "#1f2a44", fillOpacity: 0.28, interactive: false }).addTo(G.gps); });
+    const a = r.gps[0], b = r.gps[r.gps.length - 1];
+    if (a) { L.marker([a[0], a[1]], { pane: "cursor", icon: L.divIcon({ className: "", html: '<div class="pin">Start</div>', iconSize: null, iconAnchor: [-8, 12] }) }).addTo(G.net);
+             L.marker([b[0], b[1]], { pane: "cursor", icon: L.divIcon({ className: "", html: '<div class="pin end">End</div>', iconSize: null, iconAnchor: [-8, 12] }) }).addTo(G.net); }
     const lats = r.gps.map((g) => g[0]), lons = r.gps.map((g) => g[1]);
-    map.fitBounds([[Math.min(...lats), Math.min(...lons)], [Math.max(...lats), Math.max(...lons)]], { padding: [28, 28] });
-    $("plate-title").textContent = `Journey № ${r.trip_id}`;
-    const dur = r.gps.length ? r.gps[r.gps.length - 1][2] - r.gps[0][2] : 0;
-    $("plate-meta").innerHTML = `${r.points.toLocaleString()} observations · ${r.candidate_rows.toLocaleString()} candidates<br>${fmtDur(dur)} · server ${r.total_ms.toFixed(0)} ms${r.cached ? " (cached)" : ""}`;
+    map.flyToBounds([[Math.min(...lats), Math.min(...lons)], [Math.max(...lats), Math.max(...lons)]], { paddingTopLeft: [380, 110], paddingBottomRight: [400, 150], duration: 0.8 });
   }
 
+  const near = (a, b) => Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[1] - b[1]) < 1e-6;
+  function mergeLines(lines) {          // join touching fragments into long smooth polylines
+    const out = [];
+    lines.forEach((pl) => { if (!pl.length) return; const last = out[out.length - 1];
+      if (last && near(last[last.length - 1], pl[0])) last.push(...pl.slice(1)); else out.push(pl.slice()); });
+    return out;
+  }
+  function swapRoutes(animate) {        // cross-fade old routes out, new routes in
+    const pane = map.getPane("routes");
+    if (!state.result || !G.routes.getLayers().length) return drawRoutes(animate);
+    pane.style.opacity = 0;
+    setTimeout(() => { drawRoutes(animate); pane.style.opacity = 1; }, 260);
+  }
   function drawRoutes(animate) {
+    G.routes.clearLayers(); const r = state.result; if (!r) return;
+    const shown = r.models.filter((m) => state.on[m.key]); const n = shown.length;
+    // nested bands, all centred on the road: widest first, thinnest on top
+    const widths = n === 1 ? [5] : Array.from({ length: n }, (_, i) => 3 + (n - 1 - i) * 4);
+    const plan = shown.map((m, i) => ({ m, i, mode: state.mode[m.key], lines: mergeLines(state.mode[m.key] === "hmm" ? m.hmm_route : m.clf_route), w: widths[i] }));
+    plan.slice(0, 1).forEach(({ lines, w }) => lines.forEach((pl) =>
+      L.polyline(pl, { renderer: R.routes, color: "#fff", weight: w + 4, opacity: 0.95, interactive: false, lineJoin: "round", lineCap: "round" }).addTo(G.routes)));
+    plan.forEach(({ m, i, mode, lines, w }) => {
+      lines.forEach((pl) => {
+        const ln = L.polyline(pl, { renderer: R.routes, color: m.c, weight: w, opacity: 1, className: "route-path", dashArray: mode === "clf" ? "1 " + (w + 5) : null, lineCap: "round", lineJoin: "round", smoothFactor: 1.2 })
+          .bindTooltip(`${m.label} · ${mode === "hmm" ? "HMM" : "raw classifier"}`, { sticky: true }).addTo(G.routes);
+        if (animate && mode === "hmm") {
+          const el = ln.getElement(); if (!el) return;
+          const len = el.getTotalLength(); el.style.transition = "none"; el.style.strokeDasharray = `${len} ${len}`; el.style.strokeDashoffset = len;
+          el.getBoundingClientRect();
+          setTimeout(() => { el.style.transition = `stroke-dashoffset 2.2s cubic-bezier(.45,.05,.25,1) ${i * 0.3}s`; el.style.strokeDashoffset = 0; }, 900);
+          setTimeout(() => { el.style.transition = ""; el.style.strokeDasharray = ""; }, 900 + 2200 + i * 300 + 150);
+        }
+      });
+    });
+  }
+
+  function renderSummary() {
+    const r = state.result; const dur = r.gps.length ? r.gps[r.gps.length - 1][2] - r.gps[0][2] : 0;
+    $("tripTag").textContent = "#" + r.trip_id;
+    $("summary").innerHTML = [[r.points.toLocaleString(), "GPS points"], [fmtDur(dur), "duration"], [(r.total_ms / 1000).toFixed(2) + "s", "server time"]]
+      .map(([v, k]) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join("");
+  }
+
+  function renderBoard() {
     const r = state.result; if (!r) return;
-    groups.routes.clearLayers(); state.layers = {};
-    const active = r.models.filter((m) => state.on.has(m.key));
-    active.forEach((m, k) => {
-      const mode = state.mode[m.key]; const lines = mode === "hmm" ? m.hmm_route : m.clf_route;
-      // transit-map ribbons: each model is drawn as a parallel line offset by a few pixels,
-      // so routes run side by side where models agree and split apart where they disagree
-      const weight = 3.2, offset = (k - (active.length - 1) / 2) * 3.6;
-      const ls = lines.map((pl) => L.polyline(pl, { renderer: svg, color: m.colour, weight, opacity: 0.95, offset, className: "route-path", dashArray: mode === "clf" ? "5 5" : null, lineCap: "butt", lineJoin: "round" }));
-      ls.forEach((l) => l.addTo(groups.routes));
-      state.layers[m.key] = ls;
-      if (animate && mode === "hmm" && new URLSearchParams(location.search).get("anim") !== "0") requestAnimationFrame(() => ls.forEach((l) => {
-        const p = l.getElement(); if (!p) return; const len = p.getTotalLength();
-        p.style.strokeDasharray = `${len} ${len}`; p.style.strokeDashoffset = len;
-        p.style.setProperty("--dur", `${1.4 + 0.25 * k + Math.min(len / 4000, 1.6)}s`);
-        p.style.animationDelay = `${0.35 * k}s`; p.classList.add("route-draw");
-      }));
-    });
-    renderKey(); cursor();
+    const shown = r.models.filter((m) => state.on[m.key]);
+    const acc = (m) => (state.mode[m.key] === "hmm" ? m.metrics.accuracy_hmm : m.metrics.accuracy_clf);
+    shown.sort((a, b) => (acc(b) || 0) - (acc(a) || 0));
+    $("board").innerHTML = shown.map((m, i) => {
+      const x = m.metrics, lift = (x.accuracy_hmm - x.accuracy_clf) * 100, hmm = state.mode[m.key] === "hmm";
+      const rows = [["Raw classifier", x.accuracy_clf, true], ["+ HMM", x.accuracy_hmm], ["Route F1", hmm ? x.route_f1 : x.route_f1_clf], ["Continuity", hmm ? x.continuity_hmm : x.continuity_clf]];
+      return `<div class="card" style="--c:${m.c}; animation-delay:${i * 80}ms">
+        <div class="row1"><span class="rank">#${i + 1}</span><span class="lbl">${m.label}</span><span class="lift ${lift < 0 ? "neg" : ""}">${lift >= 0 ? "+" : ""}${lift.toFixed(1)} pts from HMM</span></div>
+        <div class="big">${pct(acc(m))}%</div><div class="cap">points on the right road · ${hmm ? "HMM" : "raw classifier"}</div>
+        <div class="bars">${rows.map(([k, v, soft]) => `<span>${k}</span><div class="bar"><i class="${soft ? "soft" : ""}" data-w="${(100 * (v || 0)).toFixed(1)}"></i></div><span class="n">${pct(v)}</span>`).join("")}</div>
+        <div class="foot"><span>${m.n_route_arcs} road segments</span><span>${Math.round(m.infer_ms)} ms model time</span></div>
+      </div>`;
+    }).join("") || `<div class="placeholder">Turn on at least one model.</div>`;
+    // grow bars from a min of 80% so differences are visible
+    requestAnimationFrame(() => document.querySelectorAll(".bar i").forEach((b) => { const w = parseFloat(b.dataset.w); b.style.width = Math.max(2, ((w - 80) / 20) * 100) + "%"; }));
+    countUp();
   }
 
-  // ---------------- findings ----------------
-  function renderCards() {
-    const r = state.result; const box = $("cards"); box.innerHTML = "";
-    const ms = [...r.models].sort((a, b) => (b.metrics.accuracy_hmm ?? 0) - (a.metrics.accuracy_hmm ?? 0));
-    ms.forEach((m, i) => {
-      const x = m.metrics; const d = document.createElement("div"); d.className = "card"; d.style.setProperty("--c", m.colour); d.style.animationDelay = `${0.12 * i}s`;
-      const bars = [["Classifier", x.accuracy_clf], ["+ HMM", x.accuracy_hmm], ["Route F1", x.route_f1], ["Recall", x.route_recall], ["Continuity", x.continuity_hmm]];
-      d.innerHTML = `<div class="card-top"><span class="card-name">${m.label}</span><span class="card-rank">${["first", "second", "third", "fourth", "fifth"][i] || i + 1}</span></div>
-        <div class="big">${x.accuracy_hmm == null ? "–" : (100 * x.accuracy_hmm).toFixed(1)}<small>% points matched (HMM)</small></div>
-        <div class="bars">${bars.map(([l, v]) => `<span class="lbl">${l}</span><div class="bar"><span data-w="${v == null ? 0 : (v * 100).toFixed(1)}" class="${l === "Classifier" ? "ghost" : ""}"></span></div><span class="val">${fmt(v)}</span>`).join("")}</div>
-        <div class="card-foot"><span>${m.n_route_arcs} arcs in route</span><span>${m.infer_ms.toFixed(0)} ms inference</span></div>`;
-      box.appendChild(d);
+  function countUp() {                 // numbers roll up smoothly instead of popping in
+    document.querySelectorAll(".card .big").forEach((el) => {
+      const target = parseFloat(el.textContent); if (!isFinite(target)) return;
+      const t0 = performance.now(), from = 80;
+      const step = (t) => { const k = Math.min(1, (t - t0) / 900), e = 1 - Math.pow(1 - k, 3);
+        el.textContent = (from + (target - from) * e).toFixed(1) + "%"; if (k < 1) requestAnimationFrame(step); };
+      requestAnimationFrame(step);
     });
-    requestAnimationFrame(() => setTimeout(() => box.querySelectorAll(".bar span").forEach((s) => {
-      const w = parseFloat(s.dataset.w); s.style.width = Math.max(0, (w - 50) * 2) + "%";   // axis shows 50 to 100 %
-    }), 60));
-    const a = ms[0], b = ms[1];
-    let v = `On journey № ${r.trip_id}, <b>${a.label}</b> matched ${(100 * (a.metrics.accuracy_hmm || 0)).toFixed(1)}% of GPS points`;
-    if (b) v += `, ${(100 * ((a.metrics.accuracy_hmm || 0) - (b.metrics.accuracy_hmm || 0))).toFixed(1)} points ahead of ${b.label}`;
-    const gain = (a.metrics.accuracy_hmm || 0) - (a.metrics.accuracy_clf || 0);
-    v += `. Viterbi decoding ${gain >= 0 ? "added" : "cost"} ${(100 * Math.abs(gain)).toFixed(1)} points over the classifier alone and kept ${(100 * (a.metrics.continuity_hmm || 0)).toFixed(1)}% of steps connected. (Bars show 50 to 100%. The outlined bar is classifier-only.)`;
-    $("verdict").innerHTML = v;
   }
 
-  // ---------------- timeline ----------------
+  // ---------- timeline ----------
+  const C = { gps: null, items: [] };
   function setupTimeline() {
-    const n = state.result.gps.length; const s = $("scrub");
-    s.max = Math.max(0, n - 1); s.value = 0; s.disabled = n === 0; $("play").disabled = n === 0;
-    cursor();
+    const n = state.result.gps.length; const s = $("scrub"); s.max = Math.max(0, n - 1); s.value = 0; state.pos = 0; buildCursor();
   }
-  function cursor() {
-    const r = state.result; groups.cursor.clearLayers(); if (!r || !r.gps.length) return;
-    const i = Math.min(state.idx, r.gps.length - 1); const g = r.gps[i];
-    const t0 = r.gps[0][2];
-    $("clock").textContent = `t = ${fmtDur(g[2] - t0)}`; $("ptno").textContent = `point ${i + 1} / ${r.gps.length}`;
-    const ro = []; const arcs = {};
-    r.models.filter((m) => state.on.has(m.key)).forEach((m) => {
-      const mp = (state.mode[m.key] === "hmm" ? m.matched_hmm : m.matched_clf)[i];
-      if (mp) {
-        L.polyline([[g[0], g[1]], [mp[0], mp[1]]], { renderer: R.cursor, color: m.colour, weight: 1, dashArray: "2 3", interactive: false }).addTo(groups.cursor);
-        L.marker([mp[0], mp[1]], { pane: "cursor", interactive: false, icon: L.divIcon({ className: "", iconSize: [12, 12], iconAnchor: [6, 6],
-          html: `<svg width="12" height="12"><rect x="2" y="2" width="8" height="8" transform="rotate(45 6 6)" fill="${m.colour}" stroke="#f7f2e7" stroke-width="1.2"/></svg>` }) }).addTo(groups.cursor);
-        arcs[mp[2]] = (arcs[mp[2]] || 0) + 1;
-      }
-      ro.push({ m, arc: mp ? mp[2] : null });
+  function buildCursor() {               // create cursor layers once; later frames only move them
+    G.cursor.clearLayers(); C.items = []; const r = state.result; if (!r || !r.gps.length) return;
+    r.models.filter((m) => state.on[m.key]).forEach((m) => {
+      const line = L.polyline([[0, 0], [0, 0]], { renderer: R.cursor, color: m.c, weight: 2, dashArray: "3 4", interactive: false }).addTo(G.cursor);
+      const dot = L.circleMarker([0, 0], { renderer: R.cursor, radius: 5.5, color: "#fff", weight: 2, fillColor: m.c, fillOpacity: 1, interactive: false }).addTo(G.cursor);
+      C.items.push({ m, line, dot });
     });
-    L.circleMarker([g[0], g[1]], { renderer: R.cursor, radius: 7, color: "#1d1b17", weight: 1.5, fill: false }).addTo(groups.cursor);
-    L.circleMarker([g[0], g[1]], { renderer: R.cursor, radius: 2.5, color: "#1d1b17", weight: 0, fillOpacity: 1 }).addTo(groups.cursor);
-    const agree = Object.keys(arcs).length === 1 && ro.length > 1;
-    $("readout").innerHTML = ro.map(({ m, arc }) => `<span class="ro" style="color:${m.colour}"><i></i><span style="color:var(--ink)">${m.label}: arc ${arc ?? "–"}</span></span>`).join("") +
-      (ro.length > 1 ? `<span class="ro muted">${agree ? "· all models agree" : "· models disagree here"}</span>` : "");
-    if (state.playing && !map.getBounds().pad(-0.15).contains([g[0], g[1]])) map.panTo([g[0], g[1]], { animate: true, duration: 0.4 });
+    C.gps = L.marker([0, 0], { pane: "cursor", icon: L.divIcon({ className: "", html: '<div class="gps-cursor"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }), interactive: false }).addTo(G.cursor);
+    cursor(state.pos || state.idx || 0, true);
+  }
+  const lerp = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+  let lastChipIdx = -1;
+  function cursor(pos, force) {          // pos may be fractional: we interpolate between GPS points
+    const r = state.result; if (!r || !r.gps.length || !C.gps) return;
+    pos = Math.max(0, Math.min(r.gps.length - 1, pos == null ? state.idx : pos)); state.pos = pos;
+    const i = Math.floor(pos), j = Math.min(r.gps.length - 1, i + 1), k = pos - i;
+    const g = lerp(r.gps[i], r.gps[j], k);
+    C.gps.setLatLng(g);
+    const arcs = [];
+    C.items.forEach(({ m, line, dot }) => {
+      const arr = state.mode[m.key] === "hmm" ? m.matched_hmm : m.matched_clf; const a = arr[i], b = arr[j] || a;
+      if (a) { const p = b ? lerp(a, b, k) : a; dot.setLatLng(p); line.setLatLngs([g, p]); dot.setStyle({ opacity: 1, fillOpacity: 1 }); line.setStyle({ opacity: 1 }); arcs.push(a[2]); }
+      else { dot.setStyle({ opacity: 0, fillOpacity: 0 }); line.setStyle({ opacity: 0 }); }
+    });
+    $("scrub").style.setProperty("--p", (100 * pos / Math.max(1, r.gps.length - 1)) + "%");
+    if (i === lastChipIdx && !force) return; lastChipIdx = i;
+    $("clock").textContent = fmtDur(r.gps[i][2] - r.gps[0][2]); $("ptno").textContent = `point ${(i + 1).toLocaleString()} / ${r.gps.length.toLocaleString()}`;
+    $("chips").innerHTML = C.items.map(({ m }) => { const a = (state.mode[m.key] === "hmm" ? m.matched_hmm : m.matched_clf)[i];
+      return `<span class="chip" style="--c:${m.c}"><i></i>${m.label.split(" ")[0]} · ${a ? "road " + a[2] : "no road"}</span>`; }).join("");
+    const ag = $("agree");
+    if (arcs.length > 1) { const same = arcs.every((a) => a === arcs[0]); ag.className = "agree " + (same ? "yes" : "no"); ag.textContent = same ? "All models agree" : "Models disagree here"; }
+    else { ag.className = "agree"; ag.textContent = ""; }
   }
   function play() {
-    if (!state.result) return;
     if (state.playing) return stop();
-    state.playing = true; $("play").classList.add("on"); $("play").textContent = "❚❚";
-    const n = state.result.gps.length; const step = Math.max(1, Math.round(n / 900));
-    state.timer = setInterval(() => {
-      state.idx += step; if (state.idx >= n) { state.idx = n - 1; stop(); }
-      $("scrub").value = state.idx; cursor();
-    }, 33);
+    const r = state.result; if (!r) return;
+    if (state.pos >= r.gps.length - 1) state.pos = 0;
+    $("playIcon").innerHTML = '<path d="M5 4h4v12H5zM11 4h4v12h-4z" fill="currentColor"/>';
+    let last = performance.now();
+    const frame = (t) => {             // ~speed GPS points per 60 ms, interpolated every animation frame
+      if (!state.playing) return;
+      const dt = t - last; last = t;
+      const pos = Math.min(r.gps.length - 1, state.pos + (dt / 60) * parseInt($("speed").value, 10));
+      state.idx = Math.floor(pos); $("scrub").value = state.idx; cursor(pos);
+      if (pos >= r.gps.length - 1) return stop();
+      if (follow.checked) map.panTo(C.gps.getLatLng(), { animate: false });
+      state.playing = requestAnimationFrame(frame);
+    };
+    state.playing = requestAnimationFrame(frame);
   }
-  function stop() { state.playing = false; clearInterval(state.timer); $("play").classList.remove("on"); $("play").textContent = "▶"; }
+  function stop() { if (state.playing) cancelAnimationFrame(state.playing); state.playing = null; $("playIcon").innerHTML = '<path d="M6 4l10 6-10 6z" fill="currentColor"/>'; }
+  const follow = { checked: false };
 
-  // ---------------- wire up ----------------
-  const qs = new URLSearchParams(location.search);
-  if (qs.get("api")) state.api = qs.get("api");
-  $("api").value = state.api;
-  $("connect").onclick = connect;
-  $("api").addEventListener("keydown", (e) => { if (e.key === "Enter") connect(); });
-  $("run").onclick = run;
-  $("play").onclick = play;
-  $("scrub").addEventListener("input", (e) => { state.idx = +e.target.value; cursor(); });
+  // ---------- wiring ----------
+  $("connectBtn").onclick = connect;
+  $("apiUrl").addEventListener("keydown", (e) => { if (e.key === "Enter") connect(); });
+  $("runBtn").onclick = run;
+  $("playBtn").onclick = play;
+  $("scrub").oninput = (e) => { stop(); glideTo(parseInt(e.target.value, 10)); };
+  function glideTo(target) {             // dragging / arrow keys ease the cursor instead of jumping
+    state.idx = target; const from = state.pos || 0, t0 = performance.now();
+    cancelAnimationFrame(glideTo.h);
+    const step = (t) => { const k = Math.min(1, (t - t0) / 180); cursor(from + (target - from) * (1 - Math.pow(1 - k, 3))); if (k < 1) glideTo.h = requestAnimationFrame(step); };
+    glideTo.h = requestAnimationFrame(step);
+  }
+  $("logBtn").onclick = () => $("logDrawer").classList.toggle("hidden");
+  $("logClose").onclick = () => $("logDrawer").classList.add("hidden");
   document.addEventListener("keydown", (e) => {
-    if (e.target.tagName === "INPUT" && e.target.type !== "range") return;
-    if (e.code === "Space" && state.result) { e.preventDefault(); play(); }
-    if (state.result && (e.key === "ArrowRight" || e.key === "ArrowLeft")) {
-      state.idx = Math.max(0, Math.min(state.result.gps.length - 1, state.idx + (e.key === "ArrowRight" ? 5 : -5))); $("scrub").value = state.idx; cursor();
-    }
+    if (!state.result || e.target.tagName === "INPUT") return;
+    if (e.key === " ") { e.preventDefault(); play(); }
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") { stop(); const t = Math.max(0, Math.min(state.result.gps.length - 1, state.idx + (e.key === "ArrowRight" ? 10 : -10))); $("scrub").value = t; glideTo(t); }
   });
-  connect().then(() => {
-    const t = qs.get("trip");
-    if (t && state.trips.some((x) => x.trip_id === t)) {
-      state.selTrip = t; renderTrips(); updateRun(); previewTrip(state.trips.find((x) => x.trip_id === t));
-      if (qs.get("run") === "1") run().then(() => { const i = parseInt(qs.get("t") || "0", 10); if (state.result && i) { state.idx = Math.min(i, state.result.gps.length - 1); $("scrub").value = state.idx; cursor(); } });
-    }
+
+  $("apiUrl").value = qs.get("api") || store.get("pathsnap.api") || "http://localhost:8000";
+  if (qs.get("api") || store.get("pathsnap.api")) connect().then(() => {
+    if (qs.get("trip")) { selectTrip(qs.get("trip")); if (qs.get("run") === "1") run().then(() => { const t = parseInt(qs.get("t") || "0", 10); if (t && state.result) { state.idx = Math.min(t, state.result.gps.length - 1); $("scrub").value = state.idx; cursor(state.idx, true); } }); }
   });
 })();
