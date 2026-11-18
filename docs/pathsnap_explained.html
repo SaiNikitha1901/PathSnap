@@ -419,7 +419,7 @@ details.qa div { padding: 0 0 14px 24px; color: var(--ink2); }
     <h3>On the day</h3>
     <ol>
       <li>Both laptops join the same Wi-Fi. If college Wi-Fi blocks laptop-to-laptop traffic, use a phone hotspot.</li>
-      <li>Mac: <code>DATA_DIR=&lt;evaluator folder&gt; .venv/bin/uvicorn server.app:app --host 0.0.0.0 --port 8000</code>. Keep this terminal visible: it shows the API logs.</li>
+      <li>Mac: <code>cd ~/Downloads/PathSnap &amp;&amp; DATA_DIR=data/eval_trips .venv/bin/uvicorn server.app:app --host 0.0.0.0 --port 8000</code>. The 10 evaluator trips are already in <code>data/eval_trips/</code>. Keep this terminal visible: it shows the API logs.</li>
       <li>Mac: <code>ipconfig getifaddr en0</code> gives the IP. Allow Python in the firewall pop-up.</li>
       <li>Laptop 2: in <code>ui/</code> run <code>python3 -m http.server 5500</code>, open <code>http://localhost:5500</code>, type <code>http://&lt;mac-ip&gt;:8000</code>, press Connect.</li>
     </ol>
@@ -446,6 +446,14 @@ details.qa div { padding: 0 0 14px 24px; color: var(--ink2); }
       <tr><td class="mono">✗</td><td>Direction term inside the label DP</td><td>93–95%: helped out-and-back trip 65, hurt trip 7.</td></tr>
       <tr><td class="mono">✗</td><td>Optuna tuning</td><td>Student-test 91.7% → 90.5% raw: small model underfits.</td></tr>
     </table>
+    <h3>Final check on the 10 evaluator trips</h3>
+    <p>Run once through the API after every model and setting was frozen. These numbers were not used to choose or tune anything.</p>
+    <div class="bigstat">
+      <div><b>93.6%</b><span>Ensemble, classifier alone</span></div>
+      <div><b>95.7%</b><span>Ensemble + HMM (19,674 dots)</span></div>
+      <div><b>100%</b><span>best trip (00000049)</span></div>
+      <div><b>87.8%</b><span>hardest trip (00000030)</span></div>
+    </div>
     <div class="say"><b>Why not 97%+</b>Most remaining errors are on a road that touches the correct one, right at a junction, where even our derived label is uncertain, or on roads driven out and back. Route-level F1 is already about 98%.</div>
   </section>
 
