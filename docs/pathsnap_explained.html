@@ -1,0 +1,901 @@
+<title>PathSnap, Explained</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: sticky chapter rail on the left, one reading column, interactive "plates" that sit a little wider. Map-survey palette: cool paper, navy ink, route colours. */
+:root {
+  --paper: #f2f5f8; --surface: #ffffff; --sunk: #e8edf3; --ink: #0f1b2d; --ink2: #4a5873; --mute: #7d8aa0; --rule: #d6dee8;
+  --red: #d9482b; --blue: #2b7fa8; --teal: #23897d; --gold: #c98a1e; --plum: #7b3a8e; --good: #1f8a5b; --bad: #c0392b;
+  --hl: rgba(201,138,30,.22);
+  --f-display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --f-body: Inter, system-ui, -apple-system, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #0d141f; --surface: #152031; --sunk: #1b283b; --ink: #e9eff7; --ink2: #a7b5ca; --mute: #7a8aa3; --rule: #27364c;
+  --red: #f07152; --blue: #5cb0db; --teal: #4fc2b3; --gold: #e8b14f; --plum: #c07fd6; --good: #4cc48d; --bad: #f2786a; --hl: rgba(232,177,79,.2); color-scheme: dark } }
+:root[data-theme="dark"] {
+  --paper: #0d141f; --surface: #152031; --sunk: #1b283b; --ink: #e9eff7; --ink2: #a7b5ca; --mute: #7a8aa3; --rule: #27364c;
+  --red: #f07152; --blue: #5cb0db; --teal: #4fc2b3; --gold: #e8b14f; --plum: #c07fd6; --good: #4cc48d; --bad: #f2786a; --hl: rgba(232,177,79,.2); color-scheme: dark }
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation: none !important; transition: none !important; } }
+body { background: var(--paper); color: var(--ink); font: 16px/1.62 var(--f-body); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 80px; }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
+nav.rail { position: sticky; top: 24px; align-self: start; padding-top: 40px; font-size: 13.5px; }
+nav.rail .t { font: 800 18px var(--f-display); letter-spacing: -.02em; margin-bottom: 14px; }
+nav.rail ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; counter-reset: c; }
+nav.rail a { display: grid; grid-template-columns: 26px 1fr; color: var(--ink2); text-decoration: none; padding: 5px 8px; border-radius: 8px; }
+nav.rail a:hover { background: var(--sunk); color: var(--ink); }
+nav.rail a.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 0 var(--rule); font-weight: 600; }
+nav.rail a span:first-child { font: 500 12px var(--f-mono); color: var(--mute); padding-top: 2px; }
+main { min-width: 0; padding-top: 40px; }
+.cover { padding: 24px 0 36px; border-bottom: 1px solid var(--rule); margin-bottom: 8px; }
+.kicker { font: 600 12px var(--f-body); letter-spacing: .12em; text-transform: uppercase; color: var(--red); }
+h1 { font: 800 clamp(34px, 5vw, 56px)/1.02 var(--f-display); letter-spacing: -.035em; margin: 10px 0 16px; text-wrap: balance; }
+.lede { font-size: 19px; color: var(--ink2); max-width: 62ch; margin: 0; }
+section.ch { padding: 48px 0 12px; border-bottom: 1px solid var(--rule); }
+.chead { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.chead .n { font: 600 14px var(--f-mono); color: var(--mute); }
+h2 { font: 800 30px/1.1 var(--f-display); letter-spacing: -.025em; margin: 0; text-wrap: balance; flex: 1 1 auto; }
+.owner { font: 600 12px var(--f-body); padding: 4px 10px; border-radius: 999px; background: var(--sunk); color: var(--ink2); white-space: nowrap; }
+.owner i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--c); vertical-align: 1px; }
+h3 { font: 700 19px var(--f-display); margin: 28px 0 6px; letter-spacing: -.01em; }
+p, li { max-width: 68ch; }
+p { margin: 10px 0; }
+.say { border-left: 3px solid var(--teal); background: var(--surface); padding: 12px 16px; border-radius: 0 10px 10px 0; margin: 18px 0; max-width: 72ch; }
+.say b:first-child { display: block; font: 600 11px var(--f-body); letter-spacing: .1em; text-transform: uppercase; color: var(--teal); margin-bottom: 2px; }
+code, .mono { font-family: var(--f-mono); font-size: .9em; }
+code { background: var(--sunk); padding: 1px 5px; border-radius: 5px; }
+.plate { background: var(--surface); border: 1px solid var(--rule); border-radius: 16px; padding: 20px; margin: 22px 0; overflow: hidden; }
+.plate .cap { font: 600 12px var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--mute); margin-bottom: 12px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.plate svg { width: 100%; height: auto; display: block; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+button.b { font: 600 13px var(--f-body); border: 1px solid var(--rule); background: var(--paper); color: var(--ink); padding: 8px 13px; border-radius: 10px; cursor: pointer; }
+button.b:hover { border-color: var(--ink2); }
+button.b.pri { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+button.b.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+button.b:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+input[type=range] { accent-color: var(--red); width: 220px; max-width: 100%; }
+.lab { font-size: 13px; color: var(--ink2); }
+.scroll { overflow-x: auto; }
+table.t { border-collapse: collapse; font-size: 14px; width: 100%; }
+table.t th, table.t td { padding: 7px 10px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
+table.t th { font: 600 12px var(--f-body); color: var(--mute); text-transform: uppercase; letter-spacing: .06em; }
+table.t td.num { font-family: var(--f-mono); text-align: right; font-variant-numeric: tabular-nums; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 860px) { .wrap { grid-template-columns: 1fr; } nav.rail { display: none; } .two { grid-template-columns: 1fr; } }
+
+/* team */
+.team { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+@media (max-width: 640px) { .team { grid-template-columns: 1fr; } }
+.mem { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 16px; display: grid; gap: 6px; }
+.mem .nm { font: 700 18px var(--f-display); display: flex; align-items: center; gap: 8px; }
+.mem .nm i { width: 12px; height: 12px; border-radius: 4px; background: var(--c); }
+.mem .role { font-size: 13px; color: var(--ink2); }
+.mem ul { margin: 4px 0 0; padding-left: 18px; font-size: 14px; }
+.mem .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font: 500 12px var(--f-mono); padding: 2px 8px; border-radius: 999px; background: var(--sunk); color: var(--ink2); text-decoration: none; }
+
+/* file explorer */
+.files { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 760px) { .files { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.file { border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; font: 13px var(--f-mono); background: var(--paper); }
+.file .fh { padding: 6px 10px; background: var(--sunk); font-weight: 600; display: flex; justify-content: space-between; }
+.file .fh span { color: var(--mute); font-weight: 400; }
+.file .row { display: grid; grid-template-columns: 22px 1fr; padding: 3px 10px; cursor: pointer; border-top: 1px solid var(--rule); }
+.file .row:hover, .file .row.hot { background: var(--hl); }
+.file .row .i { color: var(--mute); }
+
+/* DP */
+.dpgrid { border-collapse: separate; border-spacing: 6px; margin: 0 auto; }
+.dpgrid th { font: 600 13px var(--f-body); color: var(--ink2); padding: 2px 6px; }
+.dpgrid td { width: 92px; height: 54px; text-align: center; border-radius: 10px; background: var(--sunk); font: 600 17px var(--f-mono); position: relative; transition: background .25s, box-shadow .25s; }
+.dpgrid td small { display: block; font: 400 10.5px var(--f-mono); color: var(--mute); }
+.dpgrid td.allowed { box-shadow: inset 0 0 0 2px var(--gold); }
+.dpgrid td.pick { background: var(--hl); box-shadow: inset 0 0 0 3px var(--gold); }
+.dpgrid td.cur { background: var(--ink); color: var(--paper); }
+.dpgrid td.cur small { color: var(--paper); opacity: .7; }
+.dpgrid td.banned { opacity: .35; }
+.dpgrid td.path { background: var(--teal); color: #fff; }
+.dpgrid td.path small { color: #fff; opacity: .8; }
+.dpgrid td.empty { color: transparent; }
+.explain { background: var(--paper); border-radius: 12px; padding: 14px 16px; min-height: 92px; font-size: 15px; border: 1px dashed var(--rule); }
+.explain .f { font: 600 15px var(--f-mono); display: block; margin-top: 6px; }
+.prog { height: 4px; background: var(--sunk); border-radius: 4px; overflow: hidden; margin-top: 10px; }
+.prog i { display: block; height: 100%; width: 0; background: var(--red); transition: width .25s; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink2); margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+
+/* svg tokens */
+.s-road { stroke: var(--rule); stroke-width: 10; stroke-linecap: round; fill: none; }
+.s-roadline { stroke: var(--ink2); stroke-width: 2; fill: none; }
+.s-ink { fill: var(--ink); } .s-ink2 { fill: var(--ink2); } .s-mute { fill: var(--mute); }
+.s-txt { fill: var(--ink); font: 600 13px var(--f-body); }
+.s-small { fill: var(--ink2); font: 500 11px var(--f-mono); }
+.s-paper { fill: var(--surface); }
+.s-gps { fill: var(--blue); }
+.s-true { stroke: var(--teal); stroke-width: 5; fill: none; stroke-linecap: round; }
+.q { max-width: 72ch; }
+details.qa { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 0 16px; margin: 8px 0; max-width: 78ch; }
+details.qa summary { cursor: pointer; padding: 12px 0; font-weight: 600; list-style: none; display: flex; gap: 10px; }
+details.qa summary::before { content: "+"; font: 600 16px var(--f-mono); color: var(--red); width: 14px; }
+details.qa[open] summary::before { content: "−"; }
+details.qa div { padding: 0 0 14px 24px; color: var(--ink2); }
+.bigstat { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
+@media (max-width: 640px) { .bigstat { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.bigstat div { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 12px 14px; }
+.bigstat b { display: block; font: 800 26px var(--f-display); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.bigstat span { font-size: 12.5px; color: var(--ink2); }
+.cm { display: grid; grid-template-columns: 90px 1fr 1fr; gap: 6px; max-width: 420px; font-size: 13px; }
+.cm div { padding: 10px; border-radius: 8px; text-align: center; background: var(--sunk); }
+.cm .h { background: none; color: var(--mute); font-weight: 600; font-size: 12px; }
+.cm .g { background: color-mix(in srgb, var(--good) 18%, var(--surface)); }
+.cm .r { background: color-mix(in srgb, var(--bad) 16%, var(--surface)); }
+.cm b { display: block; font: 700 22px var(--f-mono); }
+.mrow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+@media (max-width: 640px) { .mrow { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.mrow div { background: var(--paper); border-radius: 10px; padding: 10px; }
+.mrow b { display: block; font: 700 22px var(--f-mono); font-variant-numeric: tabular-nums; }
+.mrow span { font-size: 12px; color: var(--ink2); }
+.modelcards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 640px) { .modelcards { grid-template-columns: 1fr; } }
+.mc { border: 1px solid var(--rule); border-radius: 12px; padding: 12px 14px; background: var(--surface); }
+.mc .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.mc b { font: 700 16px var(--f-display); }
+.mc .fam { font: 500 11px var(--f-mono); color: var(--mute); }
+.mc p { font-size: 14px; margin: 6px 0 0; color: var(--ink2); }
+.mc .an { font-size: 13.5px; color: var(--ink); margin-top: 6px; }
+</style>
+
+<div class="wrap">
+<nav class="rail" aria-label="Chapters">
+  <div class="t">PathSnap, Explained</div>
+  <ol id="toc"></ol>
+</nav>
+<main>
+  <header class="cover">
+    <div class="kicker">UE24CS352A · ML Hackathon · Team guide</div>
+    <h1>From noisy GPS dots to the road the car really drove.</h1>
+    <p class="lede">The whole project, explained step by step in simple words. Every picture is interactive: press the buttons, move the sliders, click the rows. Each chapter says which teammate presents it, but everyone should be able to explain everything.</p>
+  </header>
+
+  <!-- TEAM -->
+  <section class="ch" id="team" data-t="Who explains what">
+    <div class="chead"><span class="n">00</span><h2>Who explains what</h2></div>
+    <p>Four people, four areas. In the viva anyone can be asked anything, so read all chapters, but <b>your own chapters must be perfect</b>.</p>
+    <div class="team">
+      <div class="mem" style="--c: var(--red)"><div class="nm"><i></i>Nikitha</div><div class="role">ML lead · runs the server laptop</div>
+        <ul><li>How we made a label for every GPS dot (the DP)</li><li>Features, the 13 models, why LightGBM / Ensemble</li><li>Bayesian tuning with Optuna</li><li>Starts the FastAPI server and shows the API logs</li></ul>
+        <div class="chips"><a class="chip" href="#labels">04</a><a class="chip" href="#features">06</a><a class="chip" href="#models">07</a><a class="chip" href="#tuning">09</a></div></div>
+      <div class="mem" style="--c: var(--blue)"><div class="nm"><i></i>Kushal</div><div class="role">Data and EDA</div>
+        <ul><li>The problem and the four raw files</li><li>Cleaning, missing values, time gaps (trip 90: 42-hour gap)</li><li>UTM projection: why degrees are not metres</li><li>EDA plots: inventory, connectivity, 25 UTM zones</li></ul>
+        <div class="chips"><a class="chip" href="#problem">01</a><a class="chip" href="#data">02</a><a class="chip" href="#clean">03</a></div></div>
+      <div class="mem" style="--c: var(--teal)"><div class="nm"><i></i>Namitha</div><div class="role">Candidates, maps and HMM</div>
+        <ul><li>Candidate roads: 50 m, at most 10, STRtree index</li><li>Candidate miss rate (3.1% train, 0.24% test)</li><li>HMM + Viterbi: states, emission, transition, gaps</li><li>Folium maps</li></ul>
+        <div class="chips"><a class="chip" href="#candidates">05</a><a class="chip" href="#hmm">10</a></div></div>
+      <div class="mem" style="--c: var(--gold)"><div class="nm"><i></i>Shobhika</div><div class="role">Metrics, UI and deployment · runs the UI laptop</div>
+        <ul><li>Metrics: accuracy, F1, log loss, Top-1, GroupKFold</li><li>Confusion matrices and training curves</li><li>The UI and how it talks to the API</li><li>Two-laptop setup, Wi-Fi / hotspot, screenshots</li></ul>
+        <div class="chips"><a class="chip" href="#metrics">08</a><a class="chip" href="#system">11</a></div></div>
+    </div>
+  </section>
+
+  <!-- 1 PROBLEM -->
+  <section class="ch" id="problem" data-t="The problem">
+    <div class="chead"><span class="n">01</span><h2>The problem</h2><span class="owner" style="--c: var(--blue)"><i></i>Kushal</span></div>
+    <p>A car records its position with GPS about <b>once every second</b>. GPS is noisy: tall buildings bounce the signal, so each dot can be 5 to 40 metres away from the real road. Sometimes a dot lands on the next street.</p>
+    <p><b>Our job:</b> for every GPS dot, say which road piece the car was really on, and join those pieces into one connected route. This is called <b>map matching</b>.</p>
+    <div class="plate">
+      <div class="cap"><span>Plate 1 · How noise hides the route</span><span>green = real route · blue = GPS dots</span></div>
+      <svg id="noiseSvg" viewBox="0 0 680 300" role="img" aria-label="Street grid with a true route and noisy GPS dots"></svg>
+      <div class="controls"><span class="lab">GPS noise</span><input id="noise" type="range" min="0" max="30" value="12"><span id="noiseV" class="mono lab"></span><button class="b" id="reroll">New dots</button></div>
+    </div>
+    <div class="say"><b>Say it like this</b>"GPS dots are noisy. We must find which road segment the car was on at every dot, then build a connected route."</div>
+  </section>
+
+  <!-- 2 DATA -->
+  <section class="ch" id="data" data-t="The four files">
+    <div class="chead"><span class="n">02</span><h2>The four files of one trip</h2><span class="owner" style="--c: var(--blue)"><i></i>Kushal</span></div>
+    <p>Each trip is a folder with four plain text files. There are no headers and no ids written inside: <b>the row number is the id</b>, counting from 0. Hover or tap a row to see what it means in the little map.</p>
+    <div class="plate">
+      <div class="cap"><span>Plate 2 · A toy trip (same format as the real files)</span><span>hover a row</span></div>
+      <div class="two">
+        <svg id="graphSvg" viewBox="0 0 360 240" role="img" aria-label="Small road graph"></svg>
+        <div id="explainFile" class="explain">Hover a row in a file below.</div>
+      </div>
+      <div class="files" id="files" style="margin-top:14px"></div>
+    </div>
+    <ul>
+      <li><b>Arcs have a direction.</b> 0→1 and 1→0 are two different arcs: the same road, opposite directions.</li>
+      <li><b>The route lists arcs, not dots.</b> Trip 1 has 1,315 GPS dots but only 525 route arcs. A long road gets many dots; a very short road can get zero.</li>
+      <li><b>Every trip has its own map.</b> Node 5 in trip 1 and node 5 in trip 2 are different places. Partitions: 80 train trips, 10 student-test trips, 10 hidden evaluator trips.</li>
+    </ul>
+  </section>
+
+  <!-- 3 CLEAN -->
+  <section class="ch" id="clean" data-t="Cleaning and metres">
+    <div class="chead"><span class="n">03</span><h2>Cleaning, and turning degrees into metres</h2><span class="owner" style="--c: var(--blue)"><i></i>Kushal</span></div>
+    <p><b>Cleaning:</b> remove rows that are not numbers or are outside the world (|lon| &gt; 180, |lat| &gt; 90), sort by time, drop repeated timestamps. Our data had <b>0</b> of each, but we still check and report it.</p>
+    <p><b>Metres:</b> longitude and latitude are <b>angles</b>. One degree of longitude is 111 km at the equator but only about 64 km at 55° north. So we project each trip to <b>UTM</b>, a flat map in metres. The zone comes from the trip's own longitude: <code>zone = floor((lon + 180) / 6) + 1</code>.</p>
+    <div class="bigstat">
+      <div><b>208,417</b><span>GPS dots in 80 train trips</span></div>
+      <div><b>94%</b><span>of time steps are exactly 1 s</span></div>
+      <div><b>25</b><span>different UTM zones (trips all over the world)</span></div>
+      <div><b>42 h</b><span>biggest gap (trip 90, 153,064 s)</span></div>
+    </div>
+    <div class="say"><b>Say it like this</b>"Degrees are angles, not distances. We convert to UTM so that 50 metres really means 50 metres."</div>
+  </section>
+
+  <!-- 4 LABELS DP -->
+  <section class="ch" id="labels" data-t="Labels: the DP">
+    <div class="chead"><span class="n">04</span><h2>Giving every dot its correct road (the DP)</h2><span class="owner" style="--c: var(--red)"><i></i>Nikitha</span></div>
+    <p>To train a model we need, for every GPS dot, the <b>correct road</b>. The route file gives the roads <b>in order</b> (A, then B, then C) but never says which dot belongs to which road. So we work it out.</p>
+    <h3>Step 1 · Why "just take the closest road" fails</h3>
+    <p>Six dots, route A → B → C. Dot 4 is noisy: it sits slightly closer to road A. Move the slider to push dot 4 around and watch what each method says.</p>
+    <div class="plate">
+      <div class="cap"><span>Plate 4a · Closest road vs. never-go-back</span><span id="dpMode">closest road</span></div>
+      <svg id="dpPic" viewBox="0 0 680 230" role="img" aria-label="Three roads A, B, C and six GPS dots"></svg>
+      <div class="controls">
+        <button class="b on" id="mNear">Closest road</button><button class="b" id="mDP">Never go back (DP)</button>
+        <span class="lab" style="margin-left:8px">Dot 4 position</span><input id="d4" type="range" min="1" max="12" value="6">
+      </div>
+      <div class="legend"><span><i class="sw" style="background:var(--red)"></i>road A</span><span><i class="sw" style="background:var(--blue)"></i>road B</span><span><i class="sw" style="background:var(--gold)"></i>road C</span></div>
+    </div>
+    <p>With "closest road", dot 4 says <b>A</b>. The order becomes A, A, B, <b>A</b>, C, C: the car would drive back to a road it already left. The route file says that never happened. So we add one rule: <b>the labels must follow the route order, and never go back.</b> Among all orders that obey the rule, we choose the one with the <b>smallest total distance</b>.</p>
+
+    <h3>Step 2 · The table, filled one cell at a time</h3>
+    <p>Think of the table as a <b>staircase</b>. Rows are dots (top to bottom = time). Columns are roads in route order. A path through the table goes <b>down one row each dot</b>, and may stay in the same column or move <b>right</b>, never left. Moving left would mean going back to an earlier road.</p>
+    <p>Each cell answers one question: <b>"If this dot is on this road, what is the cheapest total distance so far?"</b> Press <b>Next step</b>.</p>
+    <div class="plate">
+      <div class="cap"><span>Plate 4b · The DP table</span><span id="dpStepLbl" class="mono"></span></div>
+      <div class="two" style="align-items:start">
+        <div class="scroll"><table class="dpgrid" id="dpGrid"></table></div>
+        <div>
+          <div class="explain" id="dpExplain"></div>
+          <div class="prog"><i id="dpProg"></i></div>
+          <div class="controls"><button class="b" id="dpPrev">← Back</button><button class="b pri" id="dpNext">Next step →</button><button class="b" id="dpPlay">Play all</button><button class="b" id="dpReset">Reset</button></div>
+          <div class="legend"><span><i class="sw" style="background:var(--ink)"></i>cell being filled</span><span><i class="sw" style="box-shadow: inset 0 0 0 2px var(--gold)"></i>allowed previous cells</span><span><i class="sw" style="background:var(--hl); box-shadow: inset 0 0 0 2px var(--gold)"></i>cheapest one, used</span><span><i class="sw" style="background:var(--teal)"></i>final answer path</span></div>
+        </div>
+      </div>
+    </div>
+    <h3>Step 3 · Reading the answer</h3>
+    <p>When the table is full, the smallest number in the <b>last row</b> is the best total. We then <b>walk back up</b>, each time to the cell that cell was built from. That walk is the answer: one road per dot, in route order. A real trip has about 15,000 dots × 500 roads, which is only 7.5 million tiny "add + min" steps: under a second.</p>
+    <div class="say"><b>Say it like this</b>"best[dot][road] = this dot's distance to that road + the smallest best[previous dot][same road or an earlier road]. We fill it dot by dot, then back-track from the smallest value in the last row. Allowing only the same or an earlier road keeps the route order."</div>
+    <p class="lab">Each distance is capped at 100 m, so one crazy GPS jump cannot spoil the whole alignment. The labels are our best reconstruction, not perfect truth: the median dot is about 5 to 8 m from its label road.</p>
+  </section>
+
+  <!-- 5 CANDIDATES -->
+  <section class="ch" id="candidates" data-t="Candidates and the index">
+    <div class="chead"><span class="n">05</span><h2>Candidate roads and the spatial index</h2><span class="owner" style="--c: var(--teal)"><i></i>Namitha</span></div>
+    <p>Chapter 4 wrote the <b>answer key</b>. This chapter writes the <b>options</b>: for each dot, which roads <i>could</i> it be on? We take every road within <b>50 m</b> and keep the <b>10 closest</b>. The model then picks one of these options.</p>
+    <p>The options must be found <b>without the route file</b>, because on evaluation day we only have dots and a map. A big map has up to 300,000 roads. Checking all of them for every dot is far too slow, so we use a <b>spatial index (STRtree)</b>: roads are grouped into boxes, and we only look inside the boxes near the dot.</p>
+    <div class="plate">
+      <div class="cap"><span>Plate 5 · Click anywhere on the map</span><span id="idxCount" class="mono"></span></div>
+      <canvas id="idxCanvas" width="680" height="340" style="width:100%; height:auto; border-radius:10px; cursor:crosshair; display:block"></canvas>
+      <div class="controls"><button class="b" id="idxBrute">Check every road</button><button class="b on" id="idxTree">Use the index (boxes)</button></div>
+      <div class="legend"><span><i class="sw" style="background:var(--gold)"></i>boxes we open</span><span><i class="sw" style="background:var(--red)"></i>candidates (within 50 m, max 10)</span></div>
+    </div>
+    <div class="bigstat">
+      <div><b>50 m</b><span>search radius</span></div>
+      <div><b>10</b><span>max candidates per dot</span></div>
+      <div><b>3.1%</b><span>miss rate, train</span></div>
+      <div><b>0.24%</b><span>miss rate, student-test</span></div>
+    </div>
+    <p><b>Candidate miss rate</b> = the share of dots whose correct road is not among the options. No model can get those right, so it is the ceiling for accuracy.</p>
+  </section>
+
+  <!-- 6 FEATURES -->
+  <section class="ch" id="features" data-t="Features">
+    <div class="chead"><span class="n">06</span><h2>Features: clues for each option</h2><span class="owner" style="--c: var(--red)"><i></i>Nikitha</span></div>
+    <p>Every (dot, candidate road) pair becomes one row with about <b>23 numbers</b>. The label is 1 if this road is the dot's answer from Chapter 4, otherwise 0. Only about <b>1 row in 10</b> is a 1. Click a candidate to see its clues.</p>
+    <div class="plate">
+      <div class="cap"><span>Plate 6 · Dot 37 and its three options (example values)</span><span id="featPick" class="mono"></span></div>
+      <svg id="featSvg" viewBox="0 0 680 250" role="img" aria-label="A dot near a road in two directions and a side street"></svg>
+      <div class="controls"><button class="b on" data-c="812">Arc 812 · A→B</button><button class="b" data-c="813">Arc 813 · B→A</button><button class="b" data-c="4051">Arc 4051 · side street</button></div>
+      <div class="scroll" style="margin-top:12px"><table class="t" id="featTable"></table></div>
+    </div>
+    <ul>
+      <li><b>Distance clues:</b> how far, which rank, how much farther than the closest.</li>
+      <li><b>Direction clues:</b> the angle between the car's direction and the road's. The <b>only</b> way to separate A→B from B→A, because they lie in the same place. For slow cars we widen the window until the car has moved 20 m (this fixed trip 77).</li>
+      <li><b>Window clues:</b> the average distance of the 5 (and 11) dots around this one. One noisy dot may be near a side street, but its neighbours are not.</li>
+      <li><b>Connection clues:</b> does this road touch the closest road of the previous / next dot? Cars do not teleport.</li>
+    </ul>
+    <div class="say"><b>No leakage</b>No feature uses the route file. The route is used only for labels and scoring, so the same features can be computed for any new trip.</div>
+  </section>
+
+  <!-- 7 MODELS -->
+  <section class="ch" id="models" data-t="The models">
+    <div class="chead"><span class="n">07</span><h2>The models, and which one won</h2><span class="owner" style="--c: var(--red)"><i></i>Nikitha</span></div>
+    <p>Every model does the same job: look at one row and say <b>how likely this road is the correct one</b> (0 to 1). For each dot we pick the option with the highest number. Models differ only in <b>how they think</b>.</p>
+    <div class="modelcards" id="modelCards"></div>
+    <div class="plate">
+      <div class="cap"><span>Plate 7 · Student-test accuracy (share of dots on the right road)</span><span>light = classifier alone · dark = + HMM</span></div>
+      <svg id="modelChart" viewBox="0 0 680 470" role="img" aria-label="Bar chart of model accuracy"></svg>
+      <p class="lab">Round 1 (notebook 01) used 18 features; round 2 (notebooks 02 and 03) used 23 features, so its numbers are higher. The HMM column is shown where we ran it.</p>
+    </div>
+    <div class="say"><b>Why the Ensemble / LightGBM</b>Highest Top-1 on student-test, good probabilities (log loss ≈ 0.10), fast. The Ensemble averages LightGBM and XGBoost and reaches <b>95.4%</b> with the HMM. KNN overfits (train F1 1.000 vs CV 0.910). Naive Bayes underfits and is over-confident (log loss 0.708).</div>
+  </section>
+
+  <!-- 8 METRICS -->
+  <section class="ch" id="metrics" data-t="Metrics">
+    <div class="chead"><span class="n">08</span><h2>How we score a model</h2><span class="owner" style="--c: var(--gold)"><i></i>Shobhika</span></div>
+    <p>100 example rows, 10 of them are the correct road (label 1). Compare a <b>lazy model</b> that always says "no" with a real one.</p>
+    <div class="plate">
+      <div class="cap"><span>Plate 8a · Why accuracy fools you</span><span id="cmName"></span></div>
+      <div class="controls" style="margin:0 0 12px"><button class="b on" id="cmLazy">Lazy model (always 0)</button><button class="b" id="cmReal">A real model</button></div>
+      <div class="two">
+        <div class="cm" id="cmBox"></div>
+        <div id="cmText" class="explain"></div>
+      </div>
+      <div class="mrow" id="cmStats"></div>
+    </div>
+    <table class="t">
+      <tr><th>Metric</th><th>In simple words</th></tr>
+      <tr><td><b>Precision</b></td><td>When it says "this is the road", how often is it right?</td></tr>
+      <tr><td><b>Recall</b></td><td>Of all the correct roads, how many did it find?</td></tr>
+      <tr><td><b>F1 / Macro F1</b></td><td>F1 balances precision and recall. Macro F1 averages F1 of class 1 and class 0, so the rare class counts equally.</td></tr>
+      <tr><td><b>Log loss</b></td><td>Punishes confident wrong answers. Lower is better. Matters because the HMM uses the probabilities.</td></tr>
+      <tr><td><b>Top-1 accuracy ★</b></td><td>Per GPS dot: is the highest-scoring option the correct road? Our main metric.</td></tr>
+      <tr><td><b>Continuity</b></td><td>Share of consecutive dots whose roads actually connect.</td></tr>
+      <tr><td><b>Route F1</b></td><td>Compares the set of roads in our route with the true route, weighted by length.</td></tr>
+    </table>
+    <h3>Testing fairly: GroupKFold</h3>
+    <p>Dots from the same trip look almost the same. If some go into training and others into testing, the model is tested on things it has basically seen. That is <b>leakage</b>. GroupKFold keeps <b>every trip whole</b> inside one fold.</p>
+    <div class="plate">
+      <div class="cap"><span>Plate 8b · 20 trips, 6 dots each</span><span id="foldLbl"></span></div>
+      <svg id="foldSvg" viewBox="0 0 680 190" role="img" aria-label="Trips split into train and test"></svg>
+      <div class="controls"><button class="b" id="fRand">Random split (leaks)</button><button class="b on" id="fGroup">GroupKFold</button><button class="b" id="fNext">Next fold →</button></div>
+      <div class="legend"><span><i class="sw" style="background:var(--blue)"></i>train</span><span><i class="sw" style="background:var(--red)"></i>test</span></div>
+    </div>
+  </section>
+
+  <!-- 9 TUNING -->
+  <section class="ch" id="tuning" data-t="Bayesian tuning">
+    <div class="chead"><span class="n">09</span><h2>Bayesian tuning with Optuna</h2><span class="owner" style="--c: var(--red)"><i></i>Nikitha</span></div>
+    <p>Hyperparameters are the knobs we set before training (number of leaves, learning rate, number of trees …). Grid search tries every combination; random search tries random ones. <b>Bayesian search (Optuna's TPE)</b> learns from earlier trials which knob settings look good, and tries near those next.</p>
+    <div class="plate">
+      <div class="cap"><span>Plate 9 · 30 real trials, objective = CV Top-1</span><span>dots = each trial · line = best so far</span></div>
+      <svg id="optSvg" viewBox="0 0 680 260" role="img" aria-label="Optuna trial results"></svg>
+    </div>
+    <div class="scroll"><table class="t">
+      <tr><th></th><th>CV Top-1</th><th>Student-test Top-1</th><th>Test log loss</th><th>Inference</th></tr>
+      <tr><td>LightGBM untuned</td><td class="num">0.888</td><td class="num">0.917</td><td class="num">0.100</td><td class="num">0.82 s</td></tr>
+      <tr><td>LightGBM tuned</td><td class="num">0.891</td><td class="num">0.905</td><td class="num">0.119</td><td class="num">0.53 s</td></tr>
+    </table></div>
+    <div class="say"><b>The honest answer</b>Tuning improved the CV score a little but not student-test. Optuna searched on small 20k-dot samples, so it chose a small model (250 trees, 27 leaves) that underfits when trained on all 1.2 million rows. It is faster, though. We report this instead of hiding it.</div>
+    <p class="lab">Best values: num_leaves 27 · learning_rate 0.030 · n_estimators 250 · min_child_samples 72 · subsample 0.70 · colsample_bytree 0.41 · reg_lambda 0.017 · scale_pos_weight 7.38.</p>
+  </section>
+
+  <!-- 10 HMM -->
+  <section class="ch" id="hmm" data-t="HMM and Viterbi">
+    <div class="chead"><span class="n">10</span><h2>HMM + Viterbi: making the route connect</h2><span class="owner" style="--c: var(--teal)"><i></i>Namitha</span></div>
+    <p>The model looks at <b>one dot at a time</b>, so it can choose a road that the car could never reach from the previous one. The HMM looks at <b>the whole sequence</b> and asks: "Can the car actually drive from this road to the next?"</p>
+    <ul>
+      <li><b>Hidden states:</b> the candidate roads of each dot (we cannot see the true one).</li>
+      <li><b>Emission:</b> how much the model likes this road for this dot (its probability).</li>
+      <li><b>Transition:</b> how believable the move from the previous road is. If driving distance ≈ straight-line GPS distance, the move is likely. Unconnected roads get a big penalty. A U-turn onto the reverse arc costs extra.</li>
+      <li><b>Viterbi</b> finds the best whole path. It is the <b>same staircase idea as Chapter 4</b>: a table, one column per dot, keep the best way to reach each option, then walk back.</li>
+    </ul>
+    <div class="plate">
+      <div class="cap"><span>Plate 10a · Six dots, a main road and a side street</span><span id="hmmLbl"></span></div>
+      <svg id="hmmSvg" viewBox="0 0 680 300" role="img" aria-label="HMM lattice"></svg>
+      <div class="controls"><button class="b on" id="hClf">Classifier alone</button><button class="b" id="hVit">With Viterbi</button></div>
+      <div class="explain" id="hmmText" style="margin-top:12px"></div>
+    </div>
+    <div class="plate">
+      <div class="cap"><span>Plate 10b · Real result on the 10 student-test trips</span><span>light = classifier · dark = + HMM</span></div>
+      <svg id="tripChart" viewBox="0 0 680 300" role="img" aria-label="Per-trip accuracy before and after HMM"></svg>
+      <p class="lab">The HMM helped 9 of 10 trips. Trip 7 got worse (90.5% → 88.6%): its slow, parking-style ending has unreliable direction, and the decoder locked onto the wrong direction for a while.</p>
+    </div>
+    <div class="bigstat">
+      <div><b>91.3%</b><span>classifier alone (Ensemble)</span></div>
+      <div><b>95.4%</b><span>with the HMM</span></div>
+      <div><b>99.9%</b><span>route continuity</span></div>
+      <div><b>98.3%</b><span>route F1</span></div>
+    </div>
+    <p><b>Gaps and missing candidates:</b> for a bigger time gap the transition becomes more forgiving (β grows with the gap). After 60 s the chain restarts. A dot with no candidate is skipped, and the gap is filled with the shortest path between the roads before and after it.</p>
+  </section>
+
+  <!-- 11 SYSTEM -->
+  <section class="ch" id="system" data-t="API and UI">
+    <div class="chead"><span class="n">11</span><h2>Two laptops: the API and the UI</h2><span class="owner" style="--c: var(--gold)"><i></i>Shobhika</span></div>
+    <p><b>Laptop 1 (Nikitha's Mac)</b> runs the FastAPI server: the models, the road data and the hidden correct routes. <b>Laptop 2</b> runs only the web page. When you press "Reconstruct route", the page sends a request over Wi-Fi; the server runs the whole pipeline, scores it itself, and sends back the predicted route and the scores as JSON. The correct route never leaves Laptop 1.</p>
+    <div class="plate">
+      <div class="cap"><span>Plate 11 · One request</span><span id="sysLbl" class="mono"></span></div>
+      <svg id="sysSvg" viewBox="0 0 680 230" role="img" aria-label="UI laptop sending a request to the server laptop"></svg>
+      <div class="controls"><button class="b pri" id="sysGo">Send a request</button></div>
+      <pre id="sysLog" class="mono" style="background:var(--paper); border-radius:10px; padding:12px; font-size:12px; overflow-x:auto; margin:12px 0 0; min-height:60px"></pre>
+    </div>
+    <table class="t">
+      <tr><th>Endpoint</th><th>What it does</th></tr>
+      <tr><td><code>GET /health</code></td><td>"I am alive", plus how many models and trips are loaded.</td></tr>
+      <tr><td><code>GET /models</code></td><td>The list of models with their colours and dev-test scores.</td></tr>
+      <tr><td><code>GET /trips</code></td><td>Trip ids, point counts and map box. No labels.</td></tr>
+      <tr><td><code>POST /predict</code></td><td>Runs candidates → features → model → Viterbi, scores on the server, returns routes and metrics.</td></tr>
+    </table>
+    <h3>On the day</h3>
+    <ol>
+      <li>Both laptops join the same Wi-Fi. If college Wi-Fi blocks laptop-to-laptop traffic, use a phone hotspot.</li>
+      <li>Mac: <code>DATA_DIR=&lt;evaluator folder&gt; .venv/bin/uvicorn server.app:app --host 0.0.0.0 --port 8000</code>. Keep this terminal visible: it shows the API logs.</li>
+      <li>Mac: <code>ipconfig getifaddr en0</code> gives the IP. Allow Python in the firewall pop-up.</li>
+      <li>Laptop 2: in <code>ui/</code> run <code>python3 -m http.server 5500</code>, open <code>http://localhost:5500</code>, type <code>http://&lt;mac-ip&gt;:8000</code>, press Connect.</li>
+    </ol>
+  </section>
+
+
+  <!-- 12 JOURNEY -->
+  <section class="ch" id="journey" data-t="How accuracy went up">
+    <div class="chead"><span class="n">12</span><h2>How we pushed accuracy up (and what failed)</h2><span class="owner" style="--c: var(--red)"><i></i>Nikitha</span></div>
+    <p>Examiners like to hear what you tried. These are the real student-test numbers for pointwise accuracy (the share of GPS dots on the right road).</p>
+    <div class="plate">
+      <div class="cap"><span>Plate 12 · Accuracy journey</span><span>green = kept · red = tried and dropped</span></div>
+      <svg id="journeySvg" viewBox="0 0 680 330" role="img" aria-label="Accuracy improvements step by step"></svg>
+    </div>
+    <table class="t">
+      <tr><th>Step</th><th>What we changed</th><th>Why it helped / failed</th></tr>
+      <tr><td>Baseline</td><td>LightGBM alone, 18 features</td><td>89.6%. Many errors were the reverse-direction arc.</td></tr>
+      <tr><td>+ HMM</td><td>Viterbi over the road graph</td><td>93.3%. Removes impossible jumps between unconnected roads.</td></tr>
+      <tr><td>+ long heading</td><td>Direction measured over a window that grows until the car moved 20 m</td><td>Slow trips (trip 77 at ~3.7 m/s) had noisy direction over 2 dots.</td></tr>
+      <tr><td>+ HMM fix</td><td>Moving backwards along the same arc now costs; U-turn penalty</td><td>Before, the wrong-direction arc cost nothing. Together: 95.2%.</td></tr>
+      <tr><td>+ Ensemble</td><td>Average LightGBM + XGBoost</td><td>95.4% (best).</td></tr>
+      <tr><td class="mono">✗</td><td>Posterior (forward-backward) decoding</td><td>94.6%, worse than Viterbi.</td></tr>
+      <tr><td class="mono">✗</td><td>Second-stage stacked model</td><td>92.7%, worse.</td></tr>
+      <tr><td class="mono">✗</td><td>Direction term inside the label DP</td><td>93–95%: helped out-and-back trip 65, hurt trip 7.</td></tr>
+      <tr><td class="mono">✗</td><td>Optuna tuning</td><td>Student-test 91.7% → 90.5% raw: small model underfits.</td></tr>
+    </table>
+    <div class="say"><b>Why not 97%+</b>Most remaining errors are on a road that touches the correct one, right at a junction, where even our derived label is uncertain, or on roads driven out and back. Route-level F1 is already about 98%.</div>
+  </section>
+
+  <!-- 13 NOTEBOOK TOUR -->
+  <section class="ch" id="notebooks" data-t="Notebook tour">
+    <div class="chead"><span class="n">13</span><h2>The notebooks, cell by cell</h2><span class="owner" style="--c: var(--ink2)"><i></i>Everyone</span></div>
+    <p>What each cell does and the one line to say when you scroll past it in the demo. Pick a notebook.</p>
+    <div class="controls" style="margin:4px 0 12px"><button class="b on" data-nb="0">01 · EDA + 7 models</button><button class="b" data-nb="1">02 · Optuna + HMM + export</button><button class="b" data-nb="2">03 · more models + ensemble</button></div>
+    <div class="scroll"><table class="t" id="nbTable"></table></div>
+  </section>
+
+  <!-- 14 CODE MAP -->
+  <section class="ch" id="code" data-t="Code map">
+    <div class="chead"><span class="n">14</span><h2>Where everything lives in the code</h2><span class="owner" style="--c: var(--ink2)"><i></i>Everyone</span></div>
+    <p>The notebooks and the server import the <b>same</b> <code>src/pathsnap</code> package, so training and evaluation use identical preprocessing.</p>
+    <div class="scroll"><table class="t">
+      <tr><th>File</th><th>What it does</th><th>Chapter</th></tr>
+      <tr><td><code>io.py</code></td><td>Reads the 4 files with <code>numpy.loadtxt</code>; cleans the track (invalid rows, sorting, duplicate times).</td><td>02, 03</td></tr>
+      <tr><td><code>geo.py</code></td><td>UTM projection (pyproj), point-to-segment distance, bearings, angle difference.</td><td>03</td></tr>
+      <tr><td><code>network.py</code></td><td>Road graph: arc lengths and bearings, outgoing arcs per node, STRtree, bounded Dijkstra, path between arcs, connectivity stats.</td><td>05, 10</td></tr>
+      <tr><td><code>labels.py</code></td><td>The monotonic DP alignment that gives every dot its reference arc.</td><td>04</td></tr>
+      <tr><td><code>candidates.py</code></td><td>Roads within 50 m, top 10 by distance, one row per (dot, arc).</td><td>05</td></tr>
+      <tr><td><code>features.py</code></td><td>The 23 clues, including adaptive long-window heading.</td><td>06</td></tr>
+      <tr><td><code>pipeline.py</code></td><td><code>prepare_trip</code>: clean → project → candidates → features (+ labels when the route exists).</td><td>02–06</td></tr>
+      <tr><td><code>hmm.py</code></td><td>Precomputes driving distances, Viterbi, forward-backward, rebuilds the connected route.</td><td>10</td></tr>
+      <tr><td><code>metrics.py</code></td><td>Pointwise accuracy, candidate miss rate, continuity, route precision / recall / F1.</td><td>08</td></tr>
+      <tr><td><code>viz.py</code></td><td>Folium maps with layers: GPS, network, reference, predicted routes, legend and layer control.</td><td>—</td></tr>
+      <tr><td><code>server/app.py</code></td><td>FastAPI: /health, /models, /trips, /predict, request logging, CORS.</td><td>11</td></tr>
+      <tr><td><code>ui/</code></td><td>index.html + app.js + style.css: map, model choice, results, playback.</td><td>11</td></tr>
+      <tr><td><code>artifacts/</code></td><td>Saved models (LightGBM .txt + joblib, RF, MLP, XGBoost), feature and HMM config, versions, models.json.</td><td>—</td></tr>
+    </table></div>
+  </section>
+
+  <!-- 15 QA -->
+  <section class="ch" id="qa" data-t="Viva questions">
+    <div class="chead"><span class="n">15</span><h2>Viva quick-fire questions</h2><span class="owner" style="--c: var(--ink2)"><i></i>Everyone</span></div>
+    <div id="qaList"></div>
+  </section>
+</main>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+  const txt = (parent, x, y, s, cls = "s-txt", anchor = "middle") => { const t = el("text", { x, y, class: cls, "text-anchor": anchor }, parent); t.textContent = s; return t; };
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const seeded = (seed) => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+  const gauss = (r) => { let u = 0, v = 0; while (!u) u = r(); while (!v) v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+
+  // ---------- table of contents ----------
+  const toc = $("#toc");
+  $$("section.ch").forEach((s, i) => { const li = document.createElement("li"); li.innerHTML = `<a href="#${s.id}"><span>${String(i).padStart(2, "0")}</span><span>${s.dataset.t}</span></a>`; toc.appendChild(li); });
+  const links = $$("#toc a");
+  const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) links.forEach((a) => a.classList.toggle("on", a.getAttribute("href") === "#" + e.target.id)); }), { rootMargin: "-30% 0px -60% 0px" });
+  $$("section.ch").forEach((s) => io.observe(s));
+
+  // ---------- 1. noise ----------
+  const noiseSvg = $("#noiseSvg");
+  const truePath = [[40, 250], [200, 250], [200, 130], [420, 130], [420, 50], [640, 50]];
+  let noiseSeed = 7;
+  function drawNoise() {
+    noiseSvg.innerHTML = "";
+    for (let x = 40; x <= 640; x += 80) el("line", { x1: x, y1: 20, x2: x, y2: 280, class: "s-road" }, noiseSvg);
+    for (let y = 50; y <= 250; y += 40) el("line", { x1: 20, y1: y, x2: 660, y2: y, class: "s-road" }, noiseSvg);
+    el("polyline", { points: truePath.map((p) => p.join(",")).join(" "), class: "s-true" }, noiseSvg);
+    const sd = +$("#noise").value; $("#noiseV").textContent = `≈ ${sd * 1.5 | 0} m`;
+    const r = seeded(noiseSeed);
+    for (let i = 0; i < truePath.length - 1; i++) {
+      const [a, b] = [truePath[i], truePath[i + 1]]; const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      for (let d = 0; d < len; d += 22) { const t = d / len; el("circle", { cx: a[0] + (b[0] - a[0]) * t + gauss(r) * sd, cy: a[1] + (b[1] - a[1]) * t + gauss(r) * sd, r: 4.5, class: "s-gps", opacity: .85 }, noiseSvg); }
+    }
+  }
+  $("#noise").oninput = drawNoise; $("#reroll").onclick = () => { noiseSeed = (noiseSeed * 31 + 11) % 99991; drawNoise(); }; drawNoise();
+
+  // ---------- 2. files ----------
+  const N = [[60, 190], [180, 190], [300, 190], [180, 70], [300, 70]];
+  const A = [[0, 1], [1, 0], [1, 2], [2, 1], [1, 3], [3, 4], [4, 2]];
+  const ROUTE = [0, 2, 3, 1, 4, 5];
+  const TRACK = [["8.5952", "49.8440", "1"], ["8.5953", "49.8444", "2"], ["8.5954", "49.8449", "3"], ["8.5954", "49.8454", "4"]];
+  const graphSvg = $("#graphSvg");
+  function drawGraph(hot) {
+    graphSvg.innerHTML = "";
+    const defs = el("defs", {}, graphSvg); const mk = el("marker", { id: "arr", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: "auto-start-reverse" }, defs); el("path", { d: "M0,0 L10,5 L0,10 z", fill: css("--ink2") }, mk);
+    const mk2 = el("marker", { id: "arrH", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: "auto-start-reverse" }, defs); el("path", { d: "M0,0 L10,5 L0,10 z", fill: css("--red") }, mk2);
+    A.forEach(([f, t], i) => {
+      const [x1, y1] = N[f], [x2, y2] = N[t]; const dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy), ox = -dy / L * 6, oy = dx / L * 6;
+      const isHot = hot && ((hot.type === "arc" && hot.i === i) || (hot.type === "route" && A.indexOf(A[ROUTE[hot.i]]) === i));
+      el("line", { x1: x1 + ox + dx / L * 16, y1: y1 + oy + dy / L * 16, x2: x2 + ox - dx / L * 18, y2: y2 + oy - dy / L * 18, stroke: isHot ? css("--red") : css("--ink2"), "stroke-width": isHot ? 4 : 1.6, "marker-end": `url(#${isHot ? "arrH" : "arr"})` }, graphSvg);
+      if (isHot) txt(graphSvg, (x1 + x2) / 2 + ox * 3, (y1 + y2) / 2 + oy * 3 + 4, "arc " + i, "s-small");
+    });
+    N.forEach(([x, y], i) => { const h = hot && ((hot.type === "node" && hot.i === i) || (hot.type === "arc" && A[hot.i].includes(i))); el("circle", { cx: x, cy: y, r: 14, fill: h ? css("--red") : css("--surface"), stroke: css("--ink"), "stroke-width": 2 }, graphSvg); const t = txt(graphSvg, x, y + 4.5, String(i), "s-txt"); if (h) t.setAttribute("fill", "#fff"); });
+    if (hot && hot.type === "track") { const p = [[70 + hot.i * 34, 175 - hot.i * 4]]; el("circle", { cx: p[0][0], cy: p[0][1], r: 6, class: "s-gps" }, graphSvg); }
+  }
+  const files = [
+    { name: ".nodes", sub: "lon lat", rows: N.map((_, i) => `8.58${i}  49.85${i}`), type: "node", say: (i) => `Row ${i} of <b>.nodes</b> is <b>node ${i}</b>: one point on the map (longitude, latitude). The id is just the line number.` },
+    { name: ".arcs", sub: "from to", rows: A.map(([f, t]) => `${f}   ${t}`), type: "arc", say: (i) => `Row ${i} of <b>.arcs</b> is <b>arc ${i}</b>: a road piece from node ${A[i][0]} to node ${A[i][1]}. ${A.some(([f, t]) => f === A[i][1] && t === A[i][0]) ? "Its reverse also exists as a separate arc: same road, other direction." : "It goes one way only."}` },
+    { name: ".route", sub: "arc id", rows: ROUTE.map(String), type: "route", say: (i) => `Line ${i} of <b>.route</b> says the car's ${["1st", "2nd", "3rd", "4th", "5th", "6th"][i]} road was <b>arc ${ROUTE[i]}</b>. The route is a list of arcs in driving order, not one per GPS dot.` },
+    { name: ".track", sub: "lon lat t", rows: TRACK.map((r) => r.join(" ")), type: "track", say: (i) => `Row ${i} of <b>.track</b> is one GPS dot at time ${TRACK[i][2]} s. Nothing in the file says which arc it belongs to. That is the problem we solve.` },
+  ];
+  $("#files").innerHTML = files.map((f, fi) => `<div class="file"><div class="fh">${f.name}<span>${f.sub}</span></div>${f.rows.map((r, i) => `<div class="row" tabindex="0" data-f="${fi}" data-i="${i}"><span class="i">${i}</span><span>${r}</span></div>`).join("")}</div>`).join("");
+  $$("#files .row").forEach((r) => { const go = () => { $$("#files .row").forEach((x) => x.classList.remove("hot")); r.classList.add("hot"); const f = files[+r.dataset.f], i = +r.dataset.i; drawGraph({ type: f.type, i }); $("#explainFile").innerHTML = f.say(i); }; r.onmouseenter = go; r.onfocus = go; r.onclick = go; });
+  drawGraph(null);
+
+  // ---------- 4. DP ----------
+  const ROADC = () => [css("--red"), css("--blue"), css("--gold")];
+  const RN = ["A", "B", "C"];
+  let d4 = 6, dpMode = "near";
+  const dist = () => [[3, 40, 90], [4, 30, 80], [20, 5, 60], [d4, 13 - d4, 50], [50, 30, 4], [70, 40, 3]];
+  function solve() {
+    const d = dist(), n = d.length, best = [], back = [];
+    d.forEach((row, i) => { best.push([]); back.push([]); row.forEach((v, k) => { if (i === 0) { best[i][k] = v; back[i][k] = null; return; } let m = Infinity, a = 0; for (let j = 0; j <= k; j++) if (best[i - 1][j] < m) { m = best[i - 1][j]; a = j; } best[i][k] = v + m; back[i][k] = a; }); });
+    let k = 0; best[n - 1].forEach((v, j) => { if (v < best[n - 1][k]) k = j; }); const path = Array(n); path[n - 1] = k; for (let i = n - 1; i > 0; i--) path[i - 1] = back[i][path[i]];
+    const near = d.map((row) => row.indexOf(Math.min(...row)));
+    return { d, best, back, path, near };
+  }
+  const dpPic = $("#dpPic");
+  function drawDpPic(highlightDot, highlightRoad, labelsOverride) {
+    const S = solve(); const C = ROADC(); dpPic.innerHTML = "";
+    const segs = [[40, 250], [250, 430], [430, 640]];
+    segs.forEach(([a, b], k) => { el("line", { x1: a + 4, y1: 175, x2: b - 4, y2: 175, stroke: C[k], "stroke-width": highlightRoad === k ? 14 : 9, "stroke-linecap": "round", opacity: highlightRoad == null || highlightRoad === k ? 1 : .35 }, dpPic); txt(dpPic, (a + b) / 2, 210, "road " + RN[k], "s-txt"); });
+    el("path", { d: "M 600 22 l 40 0 l -8 -6 m 8 6 l -8 6", stroke: css("--ink2"), fill: "none", "stroke-width": 2 }, dpPic); txt(dpPic, 590, 26, "time →", "s-small", "end");
+    const xs = [80, 170, 275, 345, 480, 590]; const ys = [140, 128, 150, 92 + d4 * 4, 140, 132];
+    const labels = labelsOverride || (dpMode === "near" ? S.near : S.path);
+    xs.forEach((x, i) => {
+      const lab = labels[i]; const bad = dpMode === "near" && i > 0 && labels[i] < Math.max(...labels.slice(0, i));
+      if (lab != null) el("line", { x1: x, y1: ys[i] + 8, x2: Math.min(Math.max(x, segs[lab][0] + 10), segs[lab][1] - 10), y2: 170, stroke: C[lab], "stroke-width": 2, "stroke-dasharray": "3 3" }, dpPic);
+      el("circle", { cx: x, cy: ys[i], r: highlightDot === i ? 13 : 10, fill: highlightDot === i ? css("--ink") : css("--surface"), stroke: bad ? css("--bad") : css("--ink"), "stroke-width": bad ? 3.5 : 2 }, dpPic);
+      const t = txt(dpPic, x, ys[i] + 4.5, String(i + 1), "s-txt"); if (highlightDot === i) t.setAttribute("fill", css("--paper"));
+      if (lab != null) { const lt = txt(dpPic, x, ys[i] - 20, RN[lab], "s-txt"); lt.setAttribute("fill", bad ? css("--bad") : C[lab]); }
+      if (bad) txt(dpPic, x, 40, "goes back to " + RN[lab] + "!", "s-small").setAttribute("fill", css("--bad"));
+    });
+    const tot = labels.every((v) => v != null) ? labels.reduce((s, k, i) => s + S.d[i][k], 0) : null;
+    if (tot != null) txt(dpPic, 40, 26, `labels: ${labels.map((k) => RN[k]).join(", ")}   ·   total distance ${tot} m`, "s-txt", "start");
+    $("#dpMode").textContent = dpMode === "near" ? "closest road" : "never go back";
+  }
+  $("#mNear").onclick = () => { dpMode = "near"; $("#mNear").classList.add("on"); $("#mDP").classList.remove("on"); drawDpPic(); };
+  $("#mDP").onclick = () => { dpMode = "dp"; $("#mDP").classList.add("on"); $("#mNear").classList.remove("on"); drawDpPic(); };
+  $("#d4").oninput = (e) => { d4 = +e.target.value; drawDpPic(); renderDp(); };
+
+  let step = 0; const FILL = 18, BACK = 6, TOTAL = FILL + BACK; let playing = null;
+  function renderDp() {
+    const S = solve(); const g = $("#dpGrid");
+    const cur = step > 0 && step <= FILL ? step - 1 : -1; const ci = cur >= 0 ? Math.floor(cur / 3) : -1, ck = cur >= 0 ? cur % 3 : -1;
+    const backDone = step > FILL ? step - FILL : 0; const pathCells = new Set(); for (let b = 0; b < backDone; b++) { const i = 5 - b; pathCells.add(i + "," + S.path[i]); }
+    let h = `<tr><th></th>${RN.map((r, k) => `<th style="color:${ROADC()[k]}">road ${r}</th>`).join("")}</tr>`;
+    for (let i = 0; i < 6; i++) {
+      h += `<tr><th>dot ${i + 1}</th>`;
+      for (let k = 0; k < 3; k++) {
+        const idx = i * 3 + k; const filled = idx < Math.min(step, FILL) || step > FILL; let cls = filled ? "" : "empty";
+        if (idx === cur) cls = "cur";
+        if (ci > 0 && i === ci - 1) { if (k <= ck) cls = (S.back[ci][ck] === k ? "pick" : "allowed"); else cls += " banned"; }
+        if (pathCells.has(i + "," + k)) cls = "path";
+        h += `<td class="${cls}">${filled ? S.best[i][k] : "·"}<small>${filled ? "dist " + S.d[i][k] : ""}</small></td>`;
+      }
+      h += "</tr>";
+    }
+    g.innerHTML = h;
+    const ex = $("#dpExplain"); const C = ROADC();
+    if (step === 0) { ex.innerHTML = `The table is empty. Each cell will hold the <b>cheapest total distance</b> to reach that dot on that road, obeying "never go back". Press <b>Next step</b>.`; drawDpPic(null, null, Array(6).fill(null)); }
+    else if (step <= FILL) {
+      const v = S.d[ci][ck];
+      if (ci === 0) ex.innerHTML = `<b>Dot 1 on road ${RN[ck]}.</b> Nothing comes before dot 1, so the cost is just its own distance.<span class="f">best = ${v}</span>`;
+      else { const opts = []; for (let j = 0; j <= ck; j++) opts.push(`${RN[j]} ${S.best[ci - 1][j]}`); const m = S.best[ci - 1][S.back[ci][ck]];
+        ex.innerHTML = `<b>Dot ${ci + 1} on road ${RN[ck]}.</b> Its own distance is ${v} m. Dot ${ci} must have been on road ${RN[ck]} or an earlier road (${ck === 0 ? "only A" : RN.slice(0, ck + 1).join(" or ")}), never a later one. Take the cheapest of those: min(${opts.join(", ")}) = ${m}.<span class="f">best = ${v} + ${m} = ${S.best[ci][ck]}</span>`; }
+      const lab = Array(6).fill(null); lab[ci] = ck; drawDpPic(ci, ck, lab);
+    } else {
+      const b = step - FILL; const i = 6 - b; const k = S.path[i];
+      const lab = Array(6).fill(null); for (let x = i; x < 6; x++) lab[x] = S.path[x];
+      if (b === 1) ex.innerHTML = `<b>Table full.</b> The smallest number in the last row is <b>${S.best[5][k]}</b>, on road ${RN[k]}. So dot 6 is on road ${RN[k]}, and ${S.best[5][k]} m is the best possible total.`;
+      else ex.innerHTML = `<b>Walk back.</b> Dot ${i + 2}'s cell was built from dot ${i + 1} on road ${RN[k]}, so dot ${i + 1} is on road <b style="color:${C[k]}">${RN[k]}</b>.${i === 0 ? `<span class="f">answer: ${S.path.map((x) => RN[x]).join(", ")}</span>` : ""}`;
+      drawDpPic(i, k, lab);
+    }
+    $("#dpProg").style.width = (100 * step / TOTAL) + "%"; $("#dpStepLbl").textContent = `step ${step} / ${TOTAL}`;
+    $("#dpPrev").disabled = step === 0; $("#dpNext").disabled = step === TOTAL;
+  }
+  const stopPlay = () => { clearInterval(playing); playing = null; $("#dpPlay").textContent = "Play all"; };
+  $("#dpNext").onclick = () => { stopPlay(); if (step < TOTAL) { step++; renderDp(); } };
+  $("#dpPrev").onclick = () => { stopPlay(); if (step > 0) { step--; renderDp(); } };
+  $("#dpReset").onclick = () => { stopPlay(); step = 0; renderDp(); };
+  $("#dpPlay").onclick = () => { if (playing) return stopPlay(); if (step === TOTAL) step = 0; $("#dpPlay").textContent = "Pause"; playing = setInterval(() => { if (step >= TOTAL) return stopPlay(); step++; renderDp(); }, 1300); };
+  renderDp(); dpMode = "near"; drawDpPic();
+  // after first render of table, keep top picture in "near" mode until user interacts with table
+  const origRender = renderDp;
+
+  // ---------- 5. index ----------
+  const cv = $("#idxCanvas"), cx = cv.getContext("2d"); const dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = 680 * dpr; cv.height = 340 * dpr; cx.scale(dpr, dpr);
+  const rr = seeded(42); const roads = [];
+  for (let gx = 20; gx < 680; gx += 34) for (let gy = 20; gy < 340; gy += 34) { if (rr() < .55) roads.push([gx, gy, gx + 34, gy]); if (rr() < .55) roads.push([gx, gy, gx, gy + 34]); }
+  const TW = 85, TH = 85; const tiles = new Map();
+  roads.forEach((s, i) => { const x0 = Math.min(s[0], s[2]), x1 = Math.max(s[0], s[2]), y0 = Math.min(s[1], s[3]), y1 = Math.max(s[1], s[3]); const key = Math.floor(((x0 + x1) / 2) / TW) + "," + Math.floor(((y0 + y1) / 2) / TH); if (!tiles.has(key)) tiles.set(key, []); tiles.get(key).push(i); });
+  let probe = [330, 170], useTree = true; const RAD = 50;
+  const segDist = (p, s) => { const [x1, y1, x2, y2] = s, vx = x2 - x1, vy = y2 - y1, L2 = vx * vx + vy * vy; let t = ((p[0] - x1) * vx + (p[1] - y1) * vy) / L2; t = Math.max(0, Math.min(1, t)); return Math.hypot(p[0] - x1 - t * vx, p[1] - y1 - t * vy); };
+  function drawIdx() {
+    const W = 680, H = 340; cx.clearRect(0, 0, W, H); cx.fillStyle = css("--paper"); cx.fillRect(0, 0, W, H);
+    let checked = [];
+    if (useTree) {
+      tiles.forEach((list, key) => { const [tx, ty] = key.split(",").map(Number); const bx = tx * TW, by = ty * TH; const nx = Math.max(bx - 17, Math.min(probe[0], bx + TW + 17)), ny = Math.max(by - 17, Math.min(probe[1], by + TH + 17)); const open = Math.hypot(probe[0] - nx, probe[1] - ny) <= RAD;
+        cx.strokeStyle = open ? css("--gold") : css("--rule"); cx.lineWidth = open ? 2.5 : 1; cx.setLineDash(open ? [] : [4, 4]); cx.strokeRect(bx + 2, by + 2, TW - 4, TH - 4); cx.setLineDash([]);
+        if (open) { cx.fillStyle = css("--hl"); cx.fillRect(bx + 2, by + 2, TW - 4, TH - 4); checked.push(...list); } });
+    } else checked = roads.map((_, i) => i);
+    roads.forEach((s) => { cx.strokeStyle = css("--mute"); cx.globalAlpha = .55; cx.lineWidth = 3; cx.beginPath(); cx.moveTo(s[0], s[1]); cx.lineTo(s[2], s[3]); cx.stroke(); cx.globalAlpha = 1; });
+    const cands = checked.map((i) => [i, segDist(probe, roads[i])]).filter((x) => x[1] <= RAD).sort((a, b) => a[1] - b[1]).slice(0, 10);
+    cands.forEach(([i]) => { const s = roads[i]; cx.strokeStyle = css("--red"); cx.lineWidth = 5; cx.beginPath(); cx.moveTo(s[0], s[1]); cx.lineTo(s[2], s[3]); cx.stroke(); });
+    cx.strokeStyle = css("--blue"); cx.setLineDash([5, 4]); cx.lineWidth = 1.5; cx.beginPath(); cx.arc(probe[0], probe[1], RAD, 0, Math.PI * 2); cx.stroke(); cx.setLineDash([]);
+    cx.fillStyle = css("--blue"); cx.beginPath(); cx.arc(probe[0], probe[1], 7, 0, Math.PI * 2); cx.fill();
+    $("#idxCount").textContent = `checked ${checked.length} of ${roads.length} roads → ${cands.length} candidates`;
+  }
+  cv.addEventListener("click", (e) => { const r = cv.getBoundingClientRect(); probe = [(e.clientX - r.left) * 680 / r.width, (e.clientY - r.top) * 340 / r.height]; drawIdx(); });
+  $("#idxBrute").onclick = () => { useTree = false; $("#idxBrute").classList.add("on"); $("#idxTree").classList.remove("on"); drawIdx(); };
+  $("#idxTree").onclick = () => { useTree = true; $("#idxTree").classList.add("on"); $("#idxBrute").classList.remove("on"); drawIdx(); };
+  drawIdx();
+
+  // ---------- 6. features ----------
+  const FEATS = {
+    "812": { name: "arc 812 · A→B (main road, eastbound)", y: 110, dir: 1, vals: { "distance": "4.1 m", "distance rank": "0 (closest)", "heading difference": "3°", "window distance (5 dots)": "5.0 m", "connected to previous dot's road": "yes", "label": "1 ✓ correct", "model probability": "0.94" } },
+    "813": { name: "arc 813 · B→A (same road, westbound)", y: 110, dir: -1, vals: { "distance": "4.1 m", "distance rank": "1", "heading difference": "177°", "window distance (5 dots)": "5.0 m", "connected to previous dot's road": "yes", "label": "0 · wrong direction", "model probability": "0.03" } },
+    "4051": { name: "arc 4051 · side street", y: 190, dir: 1, vals: { "distance": "21.8 m", "distance rank": "2", "heading difference": "2°", "window distance (5 dots)": "29.4 m", "connected to previous dot's road": "no", "label": "0 · parallel street", "model probability": "0.03" } },
+  };
+  let fPick = "812"; const featSvg = $("#featSvg");
+  const DOTS = [[150, 114], [240, 104], [330, 128], [420, 107], [510, 112]];
+  function drawFeat() {
+    featSvg.innerHTML = ""; const F = FEATS[fPick]; const red = css("--red");
+    el("line", { x1: 40, y1: 110, x2: 640, y2: 110, class: "s-road" }, featSvg); el("line", { x1: 40, y1: 190, x2: 640, y2: 190, class: "s-road" }, featSvg);
+    txt(featSvg, 44, 92, "main road (two arcs: 812 →, 813 ←)", "s-small", "start"); txt(featSvg, 44, 222, "side street (arc 4051 →)", "s-small", "start");
+    const y = F.y, sel = el("line", { x1: 40, y1: y, x2: 640, y2: y, stroke: red, "stroke-width": 5, "stroke-linecap": "round" }, featSvg);
+    for (let x = 90; x < 640; x += 110) el("path", { d: F.dir > 0 ? `M${x} ${y - 7} l12 7 l-12 7` : `M${x + 12} ${y - 7} l-12 7 l12 7`, stroke: red, fill: "none", "stroke-width": 2.5 }, featSvg);
+    DOTS.forEach(([x, yy], i) => { el("line", { x1: x, y1: yy, x2: x, y2: y, stroke: css("--blue"), "stroke-width": i === 2 ? 2 : 1, "stroke-dasharray": "3 3", opacity: i === 2 ? 1 : .55 }, featSvg); el("circle", { cx: x, cy: yy, r: i === 2 ? 9 : 6, class: "s-gps", opacity: i === 2 ? 1 : .55 }, featSvg); });
+    txt(featSvg, 330, 152, "dot 37", "s-small");
+    el("path", { d: "M300 60 l70 0 l-10 -7 m10 7 l-10 7", stroke: css("--ink"), fill: "none", "stroke-width": 2.5 }, featSvg); txt(featSvg, 335, 45, "car moves east (from dots around it)", "s-small");
+    $("#featPick").textContent = F.name;
+    $("#featTable").innerHTML = `<tr><th>Clue</th><th>Value for this option</th></tr>` + Object.entries(F.vals).map(([k, v]) => `<tr><td>${k}</td><td class="mono">${v}</td></tr>`).join("");
+  }
+  $$("[data-c]").forEach((b) => b.onclick = () => { fPick = b.dataset.c; $$("[data-c]").forEach((x) => x.classList.toggle("on", x === b)); drawFeat(); });
+  drawFeat();
+
+  // ---------- 7. models ----------
+  const MODELS = [
+    ["Logistic Regression", "linear", "Gives each clue a weight, adds them up, squashes to 0–1.", "A fixed scorecard. Cannot learn 'close AND same direction'."],
+    ["Gaussian Naive Bayes", "probabilistic", "Learns what each clue looks like for right and wrong roads and multiplies the chances.", "Assumes clues are independent; ours are linked, so it double-counts and is over-confident."],
+    ["KNN (k = 25)", "instance-based", "Finds the 25 most similar training rows and copies their answer.", "Asking 25 people in the same situation. Slow to predict; memorises (overfits)."],
+    ["Random Forest", "bagging", "150 decision trees, each trained on a random part of the data, then they vote.", "A committee of experts who each saw different examples."],
+    ["Extra Trees", "bagging", "Like Random Forest but split points are picked at random.", "Faster and a little less likely to overfit."],
+    ["LightGBM / XGBoost / HistGB", "boosting", "Trees built one after another; each new tree fixes the previous mistakes.", "A student who re-studies only the questions they got wrong."],
+    ["AdaBoost", "boosting", "Re-weights the rows it got wrong so the next small tree focuses on them.", "Good F1 but bad probabilities (log loss 0.33) and slow."],
+    ["Linear SVM", "kernel / margin", "Finds the widest straight gap between right and wrong rows; Platt scaling turns scores into probabilities.", "Simple and stable, but only straight-line rules."],
+    ["MLP (neural network)", "neural", "Layers of small neurons learn combinations of clues. Trained in epochs with a loss curve.", "Best probabilities (log loss 0.084–0.089)."],
+    ["Ensemble ★", "averaging", "Averages LightGBM and XGBoost probabilities.", "Two strong, slightly different opinions are safer than one."],
+  ];
+  $("#modelCards").innerHTML = MODELS.map(([n, f, h, a]) => `<div class="mc"><div class="top"><b>${n}</b><span class="fam">${f}</span></div><p>${h}</p><div class="an">${a}</div></div>`).join("");
+  const CHART = [
+    ["Round 1 · 18 features", null, null],
+    ["Gaussian NB", .853, null], ["Logistic Regression", .880, null], ["KNN", .882, null], ["Extra Trees", .888, null], ["MLP 64-32", .892, null], ["Random Forest", .896, null], ["LightGBM", .903, null],
+    ["Round 2 · 23 features", null, null],
+    ["Linear SVM", .884, .920], ["AdaBoost", .898, .933], ["Deep MLP", .903, .934], ["HistGradBoost", .906, .936], ["LightGBM tuned", .905, .947], ["LightGBM untuned", .917, .949], ["XGBoost", .915, .948], ["Ensemble ★", .913, .954],
+  ];
+  function drawModels() {
+    const s = $("#modelChart"); s.innerHTML = ""; const x0 = 170, x1 = 640, lo = .8, hi = 1; const X = (v) => x0 + (v - lo) / (hi - lo) * (x1 - x0);
+    [.8, .85, .9, .95, 1].forEach((v) => { el("line", { x1: X(v), y1: 14, x2: X(v), y2: 455, stroke: css("--rule") }, s); txt(s, X(v), 466, (v * 100).toFixed(0) + "%", "s-small"); });
+    let y = 20;
+    CHART.forEach(([n, a, b]) => {
+      if (a == null) { txt(s, 10, y + 10, n, "s-small", "start").setAttribute("fill", css("--mute")); y += 22; return; }
+      txt(s, x0 - 8, y + 12, n, "s-small", "end").setAttribute("fill", css("--ink"));
+      el("rect", { x: x0, y: y + 2, width: X(a) - x0, height: 14, rx: 3, fill: css("--blue"), opacity: .35 }, s);
+      if (b != null) { el("rect", { x: x0, y: y + 2, width: X(b) - x0, height: 14, rx: 3, fill: n.includes("★") ? css("--red") : css("--blue"), opacity: .9 }, s); el("rect", { x: x0, y: y + 2, width: X(a) - x0, height: 14, rx: 3, fill: css("--surface"), opacity: .35 }, s); txt(s, X(b) + 6, y + 13, (b * 100).toFixed(1) + "%", "s-small", "start"); }
+      else txt(s, X(a) + 6, y + 13, (a * 100).toFixed(1) + "%", "s-small", "start");
+      y += 24;
+    });
+  }
+  drawModels();
+
+  // ---------- 8. metrics ----------
+  const CMS = { lazy: { tp: 0, fp: 0, fn: 10, tn: 90, name: "always says 0" }, real: { tp: 9, fp: 3, fn: 1, tn: 87, name: "a real model" } };
+  function cm(which) {
+    const c = CMS[which]; const acc = (c.tp + c.tn) / 100; const p1 = c.tp + c.fp ? c.tp / (c.tp + c.fp) : 0, r1 = c.tp / (c.tp + c.fn); const f1 = p1 + r1 ? 2 * p1 * r1 / (p1 + r1) : 0;
+    const p0 = c.tn / (c.tn + c.fn), r0 = c.tn / (c.tn + c.fp), f0 = 2 * p0 * r0 / (p0 + r0); const mf = (f1 + f0) / 2;
+    $("#cmBox").innerHTML = `<div class="h"></div><div class="h">predicted 0</div><div class="h">predicted 1</div><div class="h">actually 0</div><div class="g"><b>${c.tn}</b>correct no</div><div class="r"><b>${c.fp}</b>false alarm</div><div class="h">actually 1</div><div class="r"><b>${c.fn}</b>missed</div><div class="g"><b>${c.tp}</b>correct yes</div>`;
+    $("#cmStats").innerHTML = [["Accuracy", acc], ["Precision (1)", p1], ["Recall (1)", r1], ["Macro F1", mf]].map(([k, v]) => `<div><b>${(v * 100).toFixed(0)}%</b><span>${k}</span></div>`).join("");
+    $("#cmText").innerHTML = which === "lazy" ? `It finds <b>none</b> of the 10 correct roads, yet accuracy is <b>90%</b>, because 90 of 100 rows are "no". Macro F1 drops to <b>${(mf * 100).toFixed(0)}%</b> and exposes it. This is why we never judge by accuracy alone.` : `It finds 9 of the 10 correct roads with 3 false alarms. Accuracy 96% and macro F1 ${(mf * 100).toFixed(0)}% now agree that this model is useful.`;
+    $("#cmName").textContent = c.name; $("#cmLazy").classList.toggle("on", which === "lazy"); $("#cmReal").classList.toggle("on", which === "real");
+  }
+  $("#cmLazy").onclick = () => cm("lazy"); $("#cmReal").onclick = () => cm("real"); cm("lazy");
+
+  let foldMode = "group", fold = 0; const fr = seeded(9); const randMask = Array.from({ length: 120 }, () => fr() < .2);
+  function drawFolds() {
+    const s = $("#foldSvg"); s.innerHTML = ""; let leaks = 0;
+    for (let t = 0; t < 20; t++) {
+      const col = t % 10, row = Math.floor(t / 10), x = 20 + col * 66, y = 20 + row * 82; el("rect", { x, y, width: 58, height: 66, rx: 8, fill: css("--paper"), stroke: css("--rule") }, s); txt(s, x + 29, y + 60, "trip " + (t + 1), "s-small");
+      let tr = 0, te = 0;
+      for (let d = 0; d < 6; d++) { const test = foldMode === "group" ? (t % 5 === fold) : randMask[t * 6 + d]; test ? te++ : tr++; el("circle", { cx: x + 12 + (d % 3) * 17, cy: y + 16 + Math.floor(d / 3) * 18, r: 6, fill: test ? css("--red") : css("--blue") }, s); }
+      if (tr && te) { leaks++; el("rect", { x: x - 2, y: y - 2, width: 62, height: 70, rx: 9, fill: "none", stroke: css("--bad"), "stroke-width": 2, "stroke-dasharray": "4 3" }, s); }
+    }
+    $("#foldLbl").textContent = foldMode === "group" ? `fold ${fold + 1} of 5 · 0 trips leak` : `${leaks} of 20 trips are split across train and test`;
+    $("#fGroup").classList.toggle("on", foldMode === "group"); $("#fRand").classList.toggle("on", foldMode === "rand"); $("#fNext").disabled = foldMode !== "group";
+  }
+  $("#fRand").onclick = () => { foldMode = "rand"; drawFolds(); }; $("#fGroup").onclick = () => { foldMode = "group"; drawFolds(); }; $("#fNext").onclick = () => { fold = (fold + 1) % 5; drawFolds(); }; drawFolds();
+
+  // ---------- 9. optuna ----------
+  const OPT = [0.8867, 0.8877, 0.8887, 0.8877, 0.8869, 0.8892, 0.8874, 0.8867, 0.8882, 0.8877, 0.888, 0.8886, 0.889, 0.8886, 0.8877, 0.8869, 0.8868, 0.8876, 0.8867, 0.8897, 0.8884, 0.8905, 0.889, 0.8901, 0.8891, 0.8907, 0.8898, 0.8899, 0.8896, 0.8903];
+  (function () {
+    const s = $("#optSvg"); const x0 = 60, x1 = 650, y0 = 220, y1 = 20, lo = .886, hi = .891; const X = (i) => x0 + i / 29 * (x1 - x0), Y = (v) => y0 - (v - lo) / (hi - lo) * (y0 - y1);
+    [.886, .887, .888, .889, .890, .891].forEach((v) => { el("line", { x1: x0, y1: Y(v), x2: x1, y2: Y(v), stroke: css("--rule") }, s); txt(s, x0 - 8, Y(v) + 4, v.toFixed(3), "s-small", "end"); });
+    [1, 10, 20, 30].forEach((i) => txt(s, X(i - 1), 242, "trial " + i, "s-small"));
+    let best = -1, pts = []; OPT.forEach((v, i) => { best = Math.max(best, v); pts.push([X(i), Y(best)]); });
+    el("polyline", { points: pts.map((p) => p.join(",")).join(" "), fill: "none", stroke: css("--red"), "stroke-width": 2.5 }, s);
+    OPT.forEach((v, i) => el("circle", { cx: X(i), cy: Y(v), r: 4.5, fill: css("--blue"), opacity: .8 }, s));
+    txt(s, X(25) - 6, Y(.8907) - 10, "best 0.8907 (trial 26)", "s-small", "end");
+    el("line", { x1: x0, y1: Y(.88805), x2: x1, y2: Y(.88805), stroke: css("--ink2"), "stroke-dasharray": "5 4" }, s); txt(s, x1, Y(.88805) - 6, "untuned 0.8881", "s-small", "end");
+  })();
+
+  // ---------- 10. HMM ----------
+  const COLS = [ [["M1", .9], ["S", .1]], [["M1", .7], ["S", .3]], [["M2", .45], ["S", .55]], [["M2", .8], ["R", .2]], [["M3", .6], ["R", .4]], [["M3", .9], ["S", .1]] ];
+  const OK = { M1: ["M1", "M2"], M2: ["M2", "M3"], M3: ["M3"], S: ["S"], R: ["R"] };
+  const T = (a, b) => (OK[a].includes(b) ? 1 : 0.02);
+  function viterbiToy() {
+    const best = [COLS[0].map(([, p]) => p)], back = [null];
+    for (let t = 1; t < COLS.length; t++) { const b = [], bk = []; COLS[t].forEach(([s, p]) => { let m = -1, a = 0; COLS[t - 1].forEach(([r], j) => { const v = best[t - 1][j] * T(r, s); if (v > m) { m = v; a = j; } }); b.push(m * p); bk.push(a); }); const mx = Math.max(...b); best.push(b.map((v) => v / mx)); back.push(bk); }
+    const n = COLS.length; let k = best[n - 1].indexOf(Math.max(...best[n - 1])); const path = [k]; for (let t = n - 1; t > 0; t--) { k = back[t][k]; path.unshift(k); } return path;
+  }
+  let hMode = "clf";
+  function drawHmm() {
+    const s = $("#hmmSvg"); s.innerHTML = ""; const colX = (t) => 70 + t * 108, rowY = (j) => 90 + j * 120;
+    const path = hMode === "clf" ? COLS.map((c) => c.indexOf(c.reduce((a, b) => (b[1] > a[1] ? b : a)))) : viterbiToy();
+    COLS.forEach((c, t) => { txt(s, colX(t), 30, "dot " + (t + 1), "s-small"); });
+    for (let t = 1; t < COLS.length; t++) { const a = COLS[t - 1][path[t - 1]][0], b = COLS[t][path[t]][0]; const ok = T(a, b) === 1;
+      el("line", { x1: colX(t - 1) + 30, y1: rowY(path[t - 1]), x2: colX(t) - 30, y2: rowY(path[t]), stroke: ok ? css("--teal") : css("--bad"), "stroke-width": 4, "stroke-dasharray": ok ? "" : "6 5" }, s);
+      if (!ok) txt(s, (colX(t - 1) + colX(t)) / 2, (rowY(path[t - 1]) + rowY(path[t])) / 2 - 10, "no road!", "s-small").setAttribute("fill", css("--bad")); }
+    COLS.forEach((c, t) => c.forEach(([name, p], j) => { const on = path[t] === j; el("rect", { x: colX(t) - 30, y: rowY(j) - 24, width: 60, height: 48, rx: 10, fill: on ? css("--ink") : css("--paper"), stroke: css("--rule") }, s); const a = txt(s, colX(t), rowY(j) - 2, name === "M1" || name === "M2" || name === "M3" ? "main " + name[1] : name === "S" ? "side st." : "reverse", "s-small"); a.setAttribute("fill", on ? css("--paper") : css("--ink")); const b = txt(s, colX(t), rowY(j) + 14, "p " + p.toFixed(2), "s-small"); b.setAttribute("fill", on ? css("--paper") : css("--ink2")); }));
+    txt(s, 10, 92, "option 1", "s-small", "start").setAttribute("fill", css("--mute")); txt(s, 10, 212, "option 2", "s-small", "start").setAttribute("fill", css("--mute"));
+    $("#hmmLbl").textContent = hMode === "clf" ? "picks the highest p at each dot" : "best connected path";
+    $("#hmmText").innerHTML = hMode === "clf" ? `Looking at each dot alone, dot 3 picks the <b>side street</b> (p 0.55 vs 0.45) because noise pushed it. But the car cannot jump from the main road to an unconnected side street and back. The route breaks twice.` : `Viterbi multiplies "how much the model likes this road" by "can the car drive here from the previous road". The side street at dot 3 has no connection to main 1 or main 2, so that path pays a big penalty. The best whole path stays on the main road: <b>main 1 → main 1 → main 2 → main 2 → main 3 → main 3</b>.`;
+    $("#hClf").classList.toggle("on", hMode === "clf"); $("#hVit").classList.toggle("on", hMode === "vit");
+  }
+  $("#hClf").onclick = () => { hMode = "clf"; drawHmm(); }; $("#hVit").onclick = () => { hMode = "vit"; drawHmm(); }; drawHmm();
+  (function () {
+    const D = [["00", .953, .971], ["07", .905, .886], ["09", .880, .910], ["40", .963, .983], ["52", .973, .996], ["56", .919, .955], ["65", .857, .884], ["76", .930, .954], ["77", .814, .934], ["91", .920, .935]];
+    const s = $("#tripChart"); const x0 = 50, y0 = 260, y1 = 20, lo = .8, hi = 1; const Y = (v) => y0 - (v - lo) / (hi - lo) * (y0 - y1); const bw = 22;
+    [.8, .85, .9, .95, 1].forEach((v) => { el("line", { x1: x0, y1: Y(v), x2: 670, y2: Y(v), stroke: css("--rule") }, s); txt(s, x0 - 8, Y(v) + 4, (v * 100) + "%", "s-small", "end"); });
+    D.forEach(([id, a, b], i) => { const x = x0 + 16 + i * 61; el("rect", { x, y: Y(a), width: bw, height: y0 - Y(a), rx: 3, fill: css("--blue"), opacity: .35 }, s); el("rect", { x: x + bw + 2, y: Y(b), width: bw, height: y0 - Y(b), rx: 3, fill: b < a ? css("--bad") : css("--teal") }, s); txt(s, x + bw, 282, "trip " + id, "s-small"); });
+  })();
+
+  // ---------- 11. system ----------
+  (function () {
+    const s = $("#sysSvg");
+    const lap = (x, label, sub) => { el("rect", { x, y: 40, width: 190, height: 120, rx: 12, fill: css("--paper"), stroke: css("--ink2"), "stroke-width": 2 }, s); el("rect", { x: x - 16, y: 160, width: 222, height: 14, rx: 6, fill: css("--ink2") }, s); txt(s, x + 95, 90, label, "s-txt"); txt(s, x + 95, 112, sub, "s-small"); };
+    lap(30, "Laptop 2 · UI", "browser + index.html"); lap(460, "Laptop 1 · Nikitha's Mac", "FastAPI · models · labels");
+    el("path", { d: "M 225 80 C 330 40, 360 40, 455 80", stroke: css("--blue"), fill: "none", "stroke-width": 2.5, "stroke-dasharray": "6 5", id: "reqPath" }, s);
+    el("path", { d: "M 455 125 C 360 165, 330 165, 225 125", stroke: css("--teal"), fill: "none", "stroke-width": 2.5, "stroke-dasharray": "6 5", id: "resPath" }, s);
+    txt(s, 340, 40, "POST /predict {trip_id, models}", "s-small"); txt(s, 340, 182, "JSON: routes + scores (never the answer)", "s-small");
+    txt(s, 340, 215, "same Wi-Fi or phone hotspot · port 8000", "s-small").setAttribute("fill", css("--mute"));
+    const pk = el("circle", { r: 8, fill: css("--red"), opacity: 0 }, s);
+    const run = (pathId, ms) => new Promise((ok) => { const p = $("#" + pathId), L = p.getTotalLength(), t0 = performance.now(); pk.setAttribute("opacity", 1); const f = (t) => { const k = Math.min(1, (t - t0) / ms); const pt = p.getPointAtLength(k * L); pk.setAttribute("cx", pt.x); pk.setAttribute("cy", pt.y); if (k < 1) requestAnimationFrame(f); else { pk.setAttribute("opacity", 0); ok(); } }; requestAnimationFrame(f); });
+    const log = $("#sysLog"); log.textContent = "Mac terminal (API logs) will appear here.";
+    $("#sysGo").onclick = async () => {
+      $("#sysGo").disabled = true; const tm = new Date().toLocaleTimeString("en-GB"); log.textContent = ""; $("#sysLbl").textContent = "sending…";
+      await run("reqPath", 900);
+      log.textContent += `${tm} | PATHSNAP | POST /predict trip=00000056 models=ensemble,xgboost points=3958\n`; $("#sysLbl").textContent = "server working: candidates → features → model → Viterbi";
+      await new Promise((r) => setTimeout(r, 700));
+      log.textContent += `${tm} | PATHSNAP |   ensemble  acc clf 0.913 → hmm 0.955  route F1 0.973\n${tm} | PATHSNAP | 200 OK (1270 ms)\n`;
+      await run("resPath", 900); $("#sysLbl").textContent = "UI draws the routes"; $("#sysGo").disabled = false;
+    };
+  })();
+
+
+  // ---------- 12. journey ----------
+  (function () {
+    const S = [["LightGBM alone", 89.6, 1], ["+ HMM", 93.3, 1], ["+ long heading & HMM fix", 95.2, 1], ["+ Ensemble (LGBM + XGB)", 95.4, 1], ["Posterior decoding", 94.6, 0], ["Stacked 2nd model", 92.7, 0], ["Heading in labels", 94.1, 0]];
+    const s = $("#journeySvg"); const x0 = 210, x1 = 640, lo = 88, hi = 96; const X = (v) => x0 + (v - lo) / (hi - lo) * (x1 - x0);
+    [88, 90, 92, 94, 96].forEach((v) => { el("line", { x1: X(v), y1: 10, x2: X(v), y2: 300, stroke: css("--rule") }, s); txt(s, X(v), 318, v + "%", "s-small"); });
+    S.forEach(([n, v, keep], i) => { const y = 20 + i * 40 + (keep ? 0 : 14); txt(s, x0 - 10, y + 15, n, "s-small", "end").setAttribute("fill", css("--ink"));
+      el("rect", { x: x0, y, width: X(v) - x0, height: 22, rx: 5, fill: keep ? css("--teal") : css("--bad"), opacity: keep ? .9 : .55 }, s); txt(s, X(v) + 8, y + 16, v.toFixed(1) + "%", "s-small", "start"); });
+    el("line", { x1: 20, y1: 182, x2: 660, y2: 182, stroke: css("--rule"), "stroke-dasharray": "4 4" }, s); txt(s, 20, 200, "tried, dropped", "s-small", "start").setAttribute("fill", css("--mute"));
+  })();
+
+  // ---------- 13. notebook tour ----------
+  const NB = [
+    [["Setup", "Detects Colab vs local, uploads/unzips the bundle, sets data and result folders.", "Same notebook runs on Colab and locally."],
+     ["Imports + config", "Loads our pathsnap package, lists 80 train and 10 student-test trips, prints radius 50 m / k 10.", "All preprocessing comes from one shared package."],
+     ["1 · Inventory", "For every trip: points, nodes, arcs, route length, gaps, UTM zone, connected components, file sizes. Saved to eda_inventory.csv.", "This is our dataset inventory."],
+     ["Data quality printout", "Missing / invalid / out-of-order / duplicate counts, share of 1 s steps, big-gap trips, connectivity, UTM zones.", "0 invalid rows; 94% 1-second steps; trip 90 has a 42 h gap."],
+     ["EDA plots", "Points per trip, nodes vs arcs, duration, sampling interval, components, trip locations.", "Networks range from 1k to 88k nodes."],
+     ["Trajectory plot", "One trip in metres: GPS (blue), reference route (green), network (grey).", "GPS sits near but not on the road."],
+     ["Folium map", "Interactive map with layers: GPS, network, reference route.", "Required geographic visualisation."],
+     ["2 · Labels + candidates", "prepare_trip on all 90 trips: DP labels, candidates, features. Candidate stats and miss rate.", "Miss rate 3.1% train, 0.24% test."],
+     ["Label/candidate plots", "Distance to label arc (with the 50 m line), rank of the true candidate, feature means by label.", "Most true roads are rank 0 or 1."],
+     ["3 · Model setup", "Defines 7 models with class weights, sampling helpers, Top-1 and score functions.", "7 families, same preprocessing."],
+     ["GroupKFold CV", "5 folds grouped by trip; macro F1, log loss, Top-1, train scores, fit time per fold.", "No trip is split across folds."],
+     ["Final fit + student-test", "Fit on the sample, score on student-test: accuracy, P, R, F1, log loss, Top-1, continuity, times.", "LightGBM best at 0.903."],
+     ["Comparison plots", "CV F1 boxplots, Top-1 vs F1 bars, log loss, continuity, inference speed.", "Choose by Top-1 + log loss, not train score."],
+     ["Confusion matrices", "One per model on student-test.", "Shows misses vs false alarms."],
+     ["Training histories", "MLP loss curve and LightGBM per-round log loss, feature importance.", "Only models with real histories get curves."],
+     ["Classifier-only map", "Best model's raw route vs reference on a student-test trip.", "Without HMM the route has jumps."],
+     ["Save", "Feature tables, run config, results zip download on Colab.", "Everything reported is reproducible."]],
+    [["Setup + data", "Same setup; rebuilds features with the 23-feature set.", ""],
+     ["Helpers", "Sampling and scoring helpers, untuned LightGBM baseline.", ""],
+     ["1 · Optuna objective", "30 TPE trials, 5-fold GroupKFold, objective = CV Top-1, logs macro F1 and log loss.", "Bayesian search learns from earlier trials."],
+     ["Optuna plots", "Optimisation history and parameter importance.", "Best CV Top-1 0.8907."],
+     ["Tuned vs untuned", "Refit best params, compare on CV and student-test, inference time.", "Tuning did not help on test; we explain why."],
+     ["2 · HMM tuning", "Grid over α, β, U-turn penalty on 15 train trips + student-test.", "Chosen α 1, β 10, U-turn 15."],
+     ["3 · Classifier vs HMM", "Per trip: pointwise accuracy, continuity, route P/R/F1.", "HMM: 90.5% → 94.7% with tuned LightGBM."],
+     ["Comparison plots", "Bars per trip for both methods.", ""],
+     ["Where HMM did not help", "Trip 7 discussion.", "Slow parking ending: unreliable heading."],
+     ["Folium maps", "Predicted vs reference routes for two trips.", ""],
+     ["4 · Export", "Saves models, feature_config, hmm_config, versions, models.json for the API.", "Server loads exactly these files."]],
+    [["Setup + data", "Same setup and 23 features.", ""],
+     ["Extra models CV", "XGBoost, HistGradientBoosting, AdaBoost, calibrated linear SVM, deep MLP with GroupKFold.", "13 models in total."],
+     ["Student-test + HMM", "Each extra model scored alone and with Viterbi.", "XGBoost 94.8% with HMM."],
+     ["Plots", "Extended comparison bars.", ""],
+     ["Soft-voting ensemble", "Averages probabilities of 10 combinations, each followed by the HMM.", "LGBM + XGB best at 95.4%."],
+     ["Export ensemble", "Adds 'Ensemble' to models.json as the UI default.", ""]],
+  ];
+  function drawNb(i) {
+    $("#nbTable").innerHTML = `<tr><th>#</th><th>Cell</th><th>What it does</th><th>Say this</th></tr>` + NB[i].map(([a, b, c], k) => `<tr><td class="mono">${k + 1}</td><td><b>${a}</b></td><td>${b}</td><td>${c || "—"}</td></tr>`).join("");
+    $$("[data-nb]").forEach((x) => x.classList.toggle("on", +x.dataset.nb === i));
+  }
+  $$("[data-nb]").forEach((b) => b.onclick = () => drawNb(+b.dataset.nb)); drawNb(0);
+
+  // ---------- 15. Q&A ----------
+  const QA = [
+    ["What is map matching?", "Finding which road segment the vehicle was on for each noisy GPS point, and joining them into a connected route."],
+    ["Why can't you use the route file directly as labels?", "It lists arcs in order, not one per GPS dot. Many dots fall on one long arc and some short arcs get none. We derive per-dot labels with a monotonic DP alignment."],
+    ["Explain the DP in one line.", "best[i][k] = distance of dot i to route arc k + min over k' ≤ k of best[i−1][k']; fill dot by dot, then back-track from the smallest value in the last row."],
+    ["Why UTM?", "Longitude/latitude are angles. UTM is a flat projection in metres, so Euclidean distance is valid at city scale. Zone chosen per trip from its longitude."],
+    ["What is a candidate and why 50 m / 10?", "A nearby road the dot could be on. About 99% of dots are within 37 m of their road; 50 m and the 10 nearest keep the miss rate small without too many rows."],
+    ["What is an STRtree?", "A spatial index: roads grouped into nested boxes, so a search only opens boxes near the dot instead of checking all 300,000 roads."],
+    ["How do you tell A→B from B→A?", "Heading difference between the car's movement direction and the arc direction. Same place, opposite directions, so distance cannot separate them."],
+    ["Why GroupKFold?", "Dots from the same trip are highly correlated. Keeping each trip inside one fold prevents leakage between train and validation."],
+    ["Why not accuracy?", "About 1 in 10 rows is positive. A model that always says 'no' gets 90% accuracy. Macro F1 and per-dot Top-1 are fair."],
+    ["Primary metric?", "Observation-level Top-1 accuracy: for each GPS dot, is the highest-scoring candidate the reference arc? It matches the real goal."],
+    ["Why LightGBM / Ensemble?", "Highest student-test Top-1, good log loss for the HMM, fast inference, stable across folds. The LGBM + XGBoost average reached 95.4% with the HMM."],
+    ["Overfitting evidence?", "KNN: train macro F1 1.000 vs CV 0.910. Random Forest small gap (0.944 vs 0.917). Naive Bayes underfits (0.821 vs 0.824, both low)."],
+    ["What is Bayesian optimisation?", "Optuna's TPE models which hyperparameter regions gave good scores and samples there next, unlike grid or random search. 30 trials, GroupKFold, objective CV Top-1."],
+    ["Did tuning help?", "CV went from 0.888 to 0.891, but student-test dropped from 0.917 to 0.905: it chose a small model on small samples that underfits on all data. It is faster. We report it honestly."],
+    ["Hidden states, emission, transition?", "States are candidate arcs per dot. Emission is the normalised classifier probability (to the power α). Transition is exp(−|driving distance − straight distance| / β), with penalties for unreachable pairs and U-turns."],
+    ["How are GPS gaps handled?", "β grows with the time gap; after 60 s the chain restarts; dots with no candidate are skipped and the route gap is filled with the shortest path."],
+    ["Did the HMM always help?", "It helped 9 of 10 trips. Trip 7 dropped (90.5% → 88.6%) because its slow parking-style ending has unreliable heading."],
+    ["How do the two laptops talk?", "The UI sends HTTP requests (GET /trips, POST /predict) to the Mac's IP on port 8000. The server returns JSON. The reference route stays on the server."],
+    ["Is anything hardcoded?", "No. Every prediction is computed live from the raw files through the API; the server logs each request."],
+    ["Limitations?", "Labels are derived, not perfect truth; junctions and out-and-back roads are ambiguous; candidate miss rate caps accuracy."],
+  ];
+  $("#qaList").innerHTML = QA.map(([q, a]) => `<details class="qa"><summary>${q}</summary><div>${a}</div></details>`).join("");
+
+  // redraw colour-dependent svgs on theme change
+  const mq = matchMedia("(prefers-color-scheme: dark)");
+  const redraw = () => { drawNoise(); drawGraph(null); renderDp(); drawIdx(); drawFeat(); drawModels(); drawFolds(); drawHmm(); };
+  mq.addEventListener && mq.addEventListener("change", redraw);
+  new MutationObserver(redraw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+})();
+</script>
