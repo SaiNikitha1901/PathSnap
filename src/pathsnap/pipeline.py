@@ -13,7 +13,7 @@ from .io import Trip, clean_track
 from .labels import align_to_route
 from .network import RoadNetwork
 
-DEFAULT_CFG = {"radius": 50.0, "k": 10, "window": 2, "label_cap": 100.0}
+DEFAULT_CFG = {"radius": 50.0, "k": 10, "window": 2, "label_cap": 100.0, "label_heading_weight": 0.0}
 
 
 @dataclass
@@ -39,6 +39,6 @@ def prepare_trip(trip: Trip, cfg: dict = DEFAULT_CFG, use_route_for_labels: bool
     df["trip"] = trip.trip_id
     ref = ref_dist = None
     if use_route_for_labels and trip.route is not None and len(trip.route):
-        ref, _, ref_dist = align_to_route(pxy, net, trip.route, cfg["label_cap"])
+        ref, _, ref_dist = align_to_route(pxy, net, trip.route, cfg["label_cap"], cfg.get("label_heading_weight", 0.0))
         df["label"] = (df["arc"].to_numpy() == ref[df["pt"].to_numpy()]).astype(int)
     return PreparedTrip(trip.trip_id, net, track, pxy, times, df, ref, ref_dist, rep)

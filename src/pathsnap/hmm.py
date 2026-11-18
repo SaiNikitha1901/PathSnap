@@ -32,6 +32,7 @@ class HMMParams:
     eps: float = 1e-4
     unreachable: float = -30.0
     gap_break: float = 60.0
+    uturn: float = 3.0          # extra cost for jumping onto the reverse arc of the same road
 
 
 @dataclass
@@ -40,6 +41,7 @@ class TripSteps:
     cand_arcs: list            # list of arrays: candidate arcs per step
     cand_rows: list            # list of arrays: row indices into the candidate dataframe
     route_d: list              # list of (K_prev, K_cur) arrays of route distances (step >= 1)
+    uturn_m: list              # list of (K_prev, K_cur) bool arrays: cur arc is the reverse of prev arc
     gc: np.ndarray             # straight distance between consecutive steps
     dt: np.ndarray             # time gap between consecutive steps
 
@@ -51,7 +53,7 @@ def precompute_steps(df: pd.DataFrame, pxy: np.ndarray, times: np.ndarray, net: 
     arcs = [df["arc"].to_numpy()[r] for r in rows]
     s_pos = [df["t"].to_numpy()[r] * net.length[a] for r, a in zip(rows, arcs)]
     gc = np.zeros(len(pts)); dt = np.zeros(len(pts))
-    route_d = [None]
+    route_d = [None]; uturn = [None]
     for i in range(1, len(pts)):
         p, q = pts[i - 1], pts[i]
         gc[i] = float(np.hypot(*(pxy[q] - pxy[p])))
@@ -66,13 +68,15 @@ def precompute_steps(df: pd.DataFrame, pxy: np.ndarray, times: np.ndarray, net: 
             rest = net.length[a] - sa[x]
             for y in range(len(B)):
                 if B[y] == a and sb[y] >= sa[x] - 15.0:
-                    M[x, y] = abs(sb[y] - sa[x])
+                    M[x, y] = sb[y] - sa[x]      # signed: moving backwards along the arc is penalised
                     continue
                 d = dist.get(int(b_from[y]))
                 if d is not None:
                     M[x, y] = rest + d + sb[y]
         route_d.append(M)
-    return TripSteps(pts, arcs, rows, route_d, gc, dt)
+        U = (net.arcs[A, 0][:, None] == net.arcs[B, 1][None, :]) & (net.arcs[A, 1][:, None] == net.arcs[B, 0][None, :])
+        uturn.append(U)
+    return TripSteps(pts, arcs, rows, route_d, uturn, gc, dt)
 
 
 def viterbi(steps: TripSteps, probs: np.ndarray, params: HMMParams) -> np.ndarray:
@@ -94,6 +98,7 @@ def viterbi(steps: TripSteps, probs: np.ndarray, params: HMMParams) -> np.ndarra
         else:
             beta = params.beta * max(1.0, steps.dt[i])
             T = np.where(np.isfinite(M), -np.abs(M - steps.gc[i]) / beta, params.unreachable)
+            T = T - params.uturn * steps.uturn_m[i]
         score = delta[:, None] + T
         bp = np.argmax(score, axis=0)
         delta = score[bp, np.arange(score.shape[1])] + emis[i]
@@ -128,3 +133,48 @@ def reconstruct_route(arc_seq: np.ndarray, net: RoadNetwork, fill: bool = True) 
             route.extend(net.path_arcs(route[-1], a))
         route.append(a)
     return route
+
+
+def _log_terms(steps: TripSteps, probs: np.ndarray, params: HMMParams):
+    emis = []
+    for r in steps.cand_rows:
+        p = probs[r]
+        p = p / max(p.sum(), 1e-12)
+        emis.append(params.alpha * np.log(np.maximum(p, params.eps)))
+    trans = [None]
+    for i in range(1, len(steps.pts)):
+        M = steps.route_d[i]
+        if steps.dt[i] > params.gap_break:
+            T = np.zeros_like(M)
+        else:
+            beta = params.beta * max(1.0, steps.dt[i])
+            T = np.where(np.isfinite(M), -np.abs(M - steps.gc[i]) / beta, params.unreachable)
+            T = T - params.uturn * steps.uturn_m[i]
+        trans.append(T)
+    return emis, trans
+
+
+def posterior(steps: TripSteps, probs: np.ndarray, params: HMMParams):
+    """Forward-backward: P(state at step i = candidate | ALL observations).
+    Picking the argmax of this posterior at each step maximises the expected number
+    of correctly matched points (Viterbi instead maximises the whole-path probability)."""
+    from scipy.special import logsumexp
+    n = len(steps.pts)
+    if n == 0:
+        return np.zeros(0, dtype=np.int64), []
+    emis, trans = _log_terms(steps, probs, params)
+    fwd = [emis[0] - logsumexp(emis[0])]
+    for i in range(1, n):
+        f = logsumexp(fwd[-1][:, None] + trans[i], axis=0) + emis[i]
+        fwd.append(f - logsumexp(f))
+    bwd = [None] * n
+    bwd[-1] = np.zeros(len(emis[-1]))
+    for i in range(n - 2, -1, -1):
+        b = logsumexp(trans[i + 1] + (emis[i + 1] + bwd[i + 1])[None, :], axis=1)
+        bwd[i] = b - logsumexp(b)
+    post = []
+    for i in range(n):
+        g = fwd[i] + bwd[i]
+        post.append(np.exp(g - logsumexp(g)))
+    dec = np.array([steps.cand_arcs[i][int(np.argmax(post[i]))] for i in range(n)], dtype=np.int64)
+    return dec, post
