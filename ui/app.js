@@ -197,6 +197,16 @@
       .map(([v, k]) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join("");
   }
 
+  function lenBar(x) {                  // stacked bar: correct / wrongly added / missed length (numbers only, no geometry)
+    if (x.ref_length_km == null || x.length_added_m == null) return "";
+    const ref = x.ref_length_km * 1000, add = x.length_added_m, miss = x.length_missed_m, ok = Math.max(0, ref - miss);
+    const tot = ok + miss + add || 1, w = (v) => (100 * v / tot).toFixed(2) + "%";
+    return `<div class="lbar" title="Length error = (added + missed) / true route length">
+      <div class="lbar-track"><i class="ok" style="width:${w(ok)}"></i><i class="miss" style="width:${w(miss)}"></i><i class="add" style="width:${w(add)}"></i></div>
+      <div class="lbar-key"><span><i class="ok"></i>correct ${(ok / 1000).toFixed(2)} km</span><span><i class="miss"></i>missed ${Math.round(miss)} m</span><span><i class="add"></i>added ${Math.round(add)} m</span></div>
+    </div>`;
+  }
+
   function renderBoard() {
     const r = state.result; if (!r) return;
     const shown = r.models.filter((m) => state.on[m.key]);
@@ -214,6 +224,7 @@
           <div><span>Route length</span><b>${x.pred_length_km != null ? x.pred_length_km.toFixed(2) : "–"} km</b><small>${x.length_diff_pct != null ? (x.length_diff_pct >= 0 ? "+" : "") + (100 * x.length_diff_pct).toFixed(1) + "% vs true" : ""}</small></div>
           <div><span>Added / missed</span><b>${x.length_added_m != null ? Math.round(x.length_added_m) : "–"} / ${x.length_missed_m != null ? Math.round(x.length_missed_m) : "–"} m</b><small>metres, HMM</small></div>
         </div>
+        ${lenBar(x)}
         <div class="foot"><span>${m.n_route_arcs} road segments</span><span>${Math.round(m.infer_ms)} ms model time</span></div>
       </div>`;
     }).join("") || `<div class="placeholder">Turn on at least one model.</div>`;

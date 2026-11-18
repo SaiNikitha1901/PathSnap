@@ -223,3 +223,11 @@ body.hide-right .fitbtn { right: 16px; }
 .lenerr span { display: block; font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lenerr b { display: block; font: 700 13px "JetBrains Mono", monospace; color: var(--ink); margin-top: 1px; white-space: nowrap; }
 .lenerr small { display: block; font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.lbar { margin-top: 10px; }
+.lbar-track { display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: #eef0f3; }
+.lbar-track i { display: block; height: 100%; transition: width .9s cubic-bezier(.2,.8,.2,1); }
+.lbar i.ok { background: #2a9d8f; } .lbar i.miss { background: #e9a23b; } .lbar i.add { background: #d1495b; }
+.lbar-key { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 5px; font: 500 10.5px "JetBrains Mono", monospace; color: var(--ink2); }
+.lbar-key span { display: inline-flex; align-items: center; gap: 4px; }
+.lbar-key i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
