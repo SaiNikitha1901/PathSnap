@@ -175,7 +175,7 @@ details.qa div { padding: 0 0 14px 24px; color: var(--ink2); }
         <ul><li>The problem and the four raw files</li><li>Cleaning, missing values, time gaps (trip 90: 42-hour gap)</li><li>UTM projection: why degrees are not metres</li><li>EDA plots: inventory, connectivity, 25 UTM zones</li></ul>
         <div class="chips"><a class="chip" href="#problem">01</a><a class="chip" href="#data">02</a><a class="chip" href="#clean">03</a></div></div>
       <div class="mem" style="--c: var(--teal)"><div class="nm"><i></i>Namitha</div><div class="role">Candidates, maps and HMM</div>
-        <ul><li>Candidate roads: 50 m, at most 10, STRtree index</li><li>Candidate miss rate (3.1% train, 0.24% test)</li><li>UI models: <b>Random Forest</b>, <b>XGBoost</b>, <b>MLP</b></li><li>HMM + Viterbi: states, emission, transition, gaps</li><li>Folium maps</li></ul>
+        <ul><li>Candidate roads: 50 m, at most 10, STRtree index</li><li>Candidate miss rate (3.1% per-trip average, 11.7% point-weighted because of trip 54; 0.24% test)</li><li>UI models: <b>Random Forest</b>, <b>XGBoost</b>, <b>MLP</b></li><li>HMM + Viterbi: states, emission, transition, gaps</li><li>Folium maps</li></ul>
         <div class="chips"><a class="chip" href="#candidates">05</a><a class="chip" href="#ui-models">07</a><a class="chip" href="#hmm">10</a></div></div>
       <div class="mem" style="--c: var(--gold)"><div class="nm"><i></i>Shobhika</div><div class="role">Metrics, UI and deployment · runs the UI laptop</div>
         <ul><li>Metrics: accuracy, F1, log loss, Top-1, GroupKFold</li><li>Confusion matrices and training curves</li><li>The UI and how it talks to the API</li><li>Two-laptop setup, Wi-Fi / hotspot, screenshots</li></ul>
@@ -281,10 +281,10 @@ details.qa div { padding: 0 0 14px 24px; color: var(--ink2); }
     <div class="bigstat">
       <div><b>50 m</b><span>search radius</span></div>
       <div><b>10</b><span>max candidates per dot</span></div>
-      <div><b>3.1%</b><span>miss rate, train</span></div>
+      <div><b>3.1% / 11.7%</b><span>miss rate, train (trip average / weighted by points)</span></div>
       <div><b>0.24%</b><span>miss rate, student-test</span></div>
     </div>
-    <p><b>Candidate miss rate</b> = the share of dots whose correct road is not among the options. No model can get those right, so it is the ceiling for accuracy.</p>
+    <p><b>Candidate miss rate</b> = the share of dots whose correct road is not among the options. No model can get those right, so it is the ceiling for accuracy. Averaged over training trips it is 3.1%, but weighted by points it is 11.7%: in trip 54, the biggest trip, most GPS points are 50–200 m away from the map that came with it, so 90.7% of its points have no correct option. Without trips 54 and 33 it is 1.7%. This is a data-quality finding worth saying in the viva.</p>
   </section>
 
   <!-- 6 FEATURES -->
@@ -906,7 +906,7 @@ details.qa div { padding: 0 0 14px 24px; color: var(--ink2); }
      ["EDA plots", "Points per trip, nodes vs arcs, duration, sampling interval, components, trip locations.", "Networks range from 1k to 88k nodes."],
      ["Trajectory plot", "One trip in metres: GPS (blue), reference route (green), network (grey).", "GPS sits near but not on the road."],
      ["Folium map", "Interactive map with layers: GPS, network, reference route.", "Required geographic visualisation."],
-     ["2 · Labels + candidates", "prepare_trip on all 90 trips: DP labels, candidates, features. Candidate stats and miss rate.", "Miss rate 3.1% train, 0.24% test."],
+     ["2 · Labels + candidates", "prepare_trip on all 90 trips: DP labels, candidates, features. Candidate stats and miss rate.", "Miss rate 3.1% per trip on average (11.7% weighted: trip 54's GPS is 50–200 m off its map), 0.24% test."],
      ["Label/candidate plots", "Distance to label arc (with the 50 m line), rank of the true candidate, feature means by label.", "Most true roads are rank 0 or 1."],
      ["3 · Model setup", "Defines 7 models with class weights, sampling helpers, Top-1 and score functions.", "7 families, same preprocessing."],
      ["GroupKFold CV", "5 folds grouped by trip; macro F1, log loss, Top-1, train scores, fit time per fold.", "No trip is split across folds."],
